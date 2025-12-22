@@ -61,36 +61,20 @@ export function BAPPTable({
   const [contractToDelete, setContractToDelete] = useState<ContractWithProgress | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // --- PATCH: Responsive sticky header & progress info ---
-  // Wrapper: progress info + table header sticky in one scrollable parent
-  return (
-    <div className="relative bg-card h-full flex flex-col overflow-auto">
-      {/* Sticky Progress Info */}
-      <div className="sticky top-0 z-30 bg-background border-b border-muted py-2 px-4 flex flex-col gap-1">
-        {/* ... Progress color legend ... */}
-        <div className="flex flex-wrap items-center gap-2 text-xs font-medium mb-1">
-          Keterangan Progress:
-          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-200" /> 100%</span>
-          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-100" /> 75-99%</span>
-          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-amber-100" /> 50-74%</span>
-          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-orange-100" /> 25-49%</span>
-          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-rose-100" /> 1-24%</span>
-          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-muted" /> 0%</span>
-        </div>
-        <div className="text-xs text-muted-foreground flex items-center gap-2">
-          <span>Kontrak dengan nama yang sama akan digabung barisnya secara otomatis</span>
-        </div>
-      </div>
-      {/* Table scrollable area */}
-      <div className="flex-1 overflow-auto">
-        {/* ...existing table rendering code... */}
-      </div>
-    </div>
-  );
-  // --- END PATCH ---
+  // Filter data based on filters
+  const filteredData = useMemo(() => {
+    return data
+      .map((customer) => {
+        // Filter by customer
+        if (filters.customer_id && customer.id !== filters.customer_id) {
+          return null;
+        }
 
-  // ...existing code (filteredData, etc)...
-  // (Pindahkan seluruh table rendering ke dalam <div className="flex-1 overflow-auto">)
+        const filteredAreas = customer.areas
+          .map((area) => {
+            const filteredContracts = area.contracts.filter((contract) => {
+              // Filter by search
+              if (
                 filters.search &&
                 !contract.name
                   .toLowerCase()
@@ -269,20 +253,55 @@ export function BAPPTable({
 
   return (
     <TooltipProvider>
-      <div className="relative bg-card h-full overflow-auto">
+      <div className="relative bg-card">
+        {/* Sticky Legend - di dalam container scroll */}
+        <div className="sticky top-0 z-30 bg-background border-b">
+          <div className="flex flex-wrap items-center gap-4 text-sm px-4 py-3 bg-muted/50">
+            <span className="text-muted-foreground font-medium">Keterangan:</span>
+            <div className="flex items-center gap-1">
+              <div className="h-3 w-3 rounded bg-emerald-100 dark:bg-emerald-950" />
+              <span className="text-xs">100%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="h-3 w-3 rounded bg-teal-100 dark:bg-teal-950" />
+              <span className="text-xs">75-99%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="h-3 w-3 rounded bg-amber-100 dark:bg-amber-950" />
+              <span className="text-xs">50-74%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="h-3 w-3 rounded bg-orange-100 dark:bg-orange-950" />
+              <span className="text-xs">25-49%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="h-3 w-3 rounded bg-rose-100 dark:bg-rose-950" />
+              <span className="text-xs">1-24%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="h-3 w-3 rounded bg-neutral-100 dark:bg-neutral-800" />
+              <span className="text-xs">0%</span>
+            </div>
+            <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+              <Info className="h-3 w-3" />
+              <span>Kontrak dengan nama sama digabung otomatis</span>
+            </div>
+          </div>
+        </div>
+        
         <table className="w-full border-collapse text-sm">
-          <thead className="sticky top-0 z-30">
+          <thead className="sticky top-10 z-20 shadow-sm">
             <tr className="border-b bg-muted">
-              <th className="sticky left-0 z-40 w-12 border-r bg-muted px-3 py-3 text-center font-medium">
+              <th className="sticky left-0 z-30 w-12 border-r bg-muted px-3 py-3 text-center font-medium">
                 NO
               </th>
-              <th className="sticky left-12 z-40 w-32 border-r bg-muted px-3 py-3 text-left font-medium">
+              <th className="sticky left-12 z-30 w-32 border-r bg-muted px-3 py-3 text-left font-medium">
                 CUSTOMER
               </th>
-              <th className="sticky left-44 z-40 w-[200px] border-r bg-muted px-3 py-3 text-left font-medium">
+              <th className="sticky left-44 z-30 w-50 border-r bg-muted px-3 py-3 text-left font-medium">
                 NAMA KONTRAK
               </th>
-              <th className="sticky left-[calc(11rem+200px)] z-40 w-[180px] border-r bg-muted px-3 py-3 text-left font-medium">
+              <th className="sticky left-94 z-30 w-45 border-r bg-muted px-3 py-3 text-left font-medium">
                 AREA
               </th>
               <th className="w-20 border-r bg-muted px-3 py-3 text-center font-medium">

@@ -62,27 +62,18 @@ export function EditProgressDialog({
     }
   }, [open, monthProgress]);
 
-  // --- PATCH: Dialog fixed size & scrollable content ---
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[400px] max-w-[95vw] h-[90vh] max-h-[95vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Edit Progress Bulan {MONTH_NAMES_FULL[month - 1]}</DialogTitle>
-          <DialogDescription>
-            Update status tanda tangan dan upload dokumen BAPP.
-          </DialogDescription>
-        </DialogHeader>
-        {/* Konten utama di-scroll jika overflow */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          {/* ...existing form content... */}
-        </div>
-        <DialogFooter>
-          {/* ...existing footer content... */}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-  // --- END PATCH ---
+  // Handle signature status change
+  const handleSignatureChange = (signatureId: string, isCompleted: boolean) => {
+    setSignatureStatuses((prev) => ({
+      ...prev,
+      [signatureId]: isCompleted,
+    }));
+  };
+
+  // Handle save
+  const handleSave = async () => {
+    setIsLoading(true);
+    try {
       if (isSupabaseConfigured()) {
         // Save to Supabase
         const sigStatuses = Object.entries(signatureStatuses).map(

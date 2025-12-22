@@ -23,7 +23,6 @@ import {
   AlertCircle,
   Building2,
   Plus,
-  HelpCircle,
 } from "lucide-react";
 
 export function DashboardContent() {
@@ -166,7 +165,7 @@ export function DashboardContent() {
     <div className="min-h-screen bg-background">
       <DashboardHeader />
 
-      <main className="container mx-auto px-4 py-6 sm:px-6 lg:px-8">
+      <main className="container mx-auto px-4 mt-5 sm:px-6 lg:px-8">
         <div className="space-y-6">
           {/* Page Title */}
           <div className="flex items-center justify-between">
@@ -252,8 +251,8 @@ export function DashboardContent() {
           </div>
         </div>
 
-        {/* Sticky Filter Section */}
-        <div className="sticky top-16 z-30 bg-background pt-4 pb-2">
+        {/* Filter Section */}
+        <div className="my-4">
           <Card className="shadow-sm">
             <CardContent className="pt-6">
               <DashboardFiltersBar
@@ -263,47 +262,11 @@ export function DashboardContent() {
               />
             </CardContent>
           </Card>
-
-          {/* Progress Legend */}
-          <div className="flex flex-wrap items-center gap-4 text-sm mt-4 px-1">
-            <span className="text-muted-foreground">Keterangan Progress:</span>
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded bg-emerald-100 dark:bg-emerald-950" />
-              <span>100%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded bg-teal-100 dark:bg-teal-950" />
-              <span>75-99%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded bg-amber-100 dark:bg-amber-950" />
-              <span>50-74%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded bg-orange-100 dark:bg-orange-950" />
-              <span>25-49%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded bg-rose-100 dark:bg-rose-950" />
-              <span>1-24%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded bg-neutral-100 dark:bg-neutral-800" />
-              <span>0%</span>
-            </div>
-            <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-              <HelpCircle className="h-3 w-3" />
-              <span>
-                Kontrak dengan nama yang sama akan digabung barisnya secara
-                otomatis
-              </span>
-            </div>
-          </div>
         </div>
 
-        {/* BAPP Table - Taller with more padding */}
-        <div className="mt-4 pb-8">
-          <div className="h-[calc(100vh-320px)] min-h-[500px] overflow-auto rounded-lg border shadow-sm">
+        {/* BAPP Table */}
+        <div>
+          <div className="h-[calc(100vh-280px)] min-h-96 rounded-lg border shadow-sm overflow-auto isolate">
             <BAPPTable
               data={data}
               filters={filters}
