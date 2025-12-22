@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Dashboard website untuk monitoring progress kontrak BAPP (Berita Acara Pemeriksaan Pekerjaan). Menampilkan data progress per customer, area, dan kontrak dalam format tabel dengan tracking bulanan.
+Dashboard website untuk monitoring progress kontrak BAPP (Berita Acara Pemeriksaan Pekerjaan). Menampilkan data progress per customer, area, dan kontrak dalam format tabel dengan tracking bulanan. Mendukung admin CRUD untuk manajemen kontrak dan progress.
 
 ## Tech Stack
 
@@ -26,14 +26,20 @@ src/
 │   ├── ui/                 # shadcn/ui components
 │   ├── auth/               # Login form
 │   ├── dashboard/          # Dashboard components
-│   │   ├── header.tsx      # Top navigation
-│   │   ├── filters.tsx     # Search & filter bar
-│   │   ├── bapp-table.tsx  # Main data table (frozen columns)
-│   │   ├── progress-dialog.tsx  # Progress detail modal
-│   │   └── dashboard-content.tsx
+│   │   ├── header.tsx           # Top navigation with user menu
+│   │   ├── filters.tsx          # Search & filter bar (year, customer, status)
+│   │   ├── bapp-table.tsx       # Main data table (frozen columns)
+│   │   ├── progress-dialog.tsx  # View progress detail modal
+│   │   ├── edit-progress-dialog.tsx   # Admin: edit monthly progress
+│   │   ├── contract-form-dialog.tsx   # Admin: create/edit contracts
+│   │   └── dashboard-content.tsx      # Main dashboard container
 │   └── providers/          # Context providers
 ├── lib/
-│   ├── supabase/           # Supabase clients (client, server, middleware)
+│   ├── supabase/           # Supabase clients
+│   │   ├── client.ts       # Browser client + isSupabaseConfigured()
+│   │   ├── server.ts       # Server-side client
+│   │   ├── middleware.ts   # Auth middleware client
+│   │   └── data.ts         # All CRUD functions
 │   ├── placeholder-data.ts # Mock data for dev mode
 │   └── utils.ts            # shadcn utilities
 ├── types/
@@ -43,15 +49,26 @@ src/
 
 ## Data Model
 
-Hierarchical structure: **Customer → Area → Contract → Monthly Progress**
+Hierarchical structure: **Customer → Area → Contract → Monthly Progress → Signatures**
 
 Key types in `src/types/database.ts`:
 
 - `CustomerWithAreas` - Top-level with nested areas
-- `ContractWithProgress` - Contract with 12 months of progress
-- `MonthlyProgressDetail` - Signatures + upload status = percentage
+- `AreaWithContracts` - Area with nested contracts
+- `ContractWithProgress` - Contract with 12 months of progress + dynamic signature count
+- `MonthlyProgressDetail` - Individual signatures + upload status
+- `SignatureDetail` - Individual signature status (name, role, is_completed)
+- `ContractFormData` - Form data for creating/editing contracts
 
-Progress calculation: `(completed_signatures + upload_done) / (total_signatures + 1) * 100`
+### Progress Calculation
+
+```typescript
+progress =
+  ((completed_signatures + (upload_done ? 1 : 0)) / (total_signatures + 1)) *
+  100;
+```
+
+Each contract has a **variable** number of signatures (2-5). The upload link counts as 1 additional item.
 
 ## Key Commands
 
@@ -60,6 +77,18 @@ npm run dev     # Dev server at localhost:3000
 npm run build   # Production build
 npm run lint    # ESLint check
 ```
+
+## Admin Features
+
+Logged-in users are treated as admins (for demo). Admin capabilities:
+
+1. **Add Contract** - Button in header opens `ContractFormDialog`
+2. **Edit Progress** - Pencil icon on hover opens `EditProgressDialog`
+3. **CRUD Functions** in `src/lib/supabase/data.ts`:
+   - `createContract(contractData, signatures)`
+   - `updateContract(id, updates)`
+   - `updateMonthlyProgress(contractId, month, year, uploadLink, isUploadCompleted, signatureStatuses)`
+   - `deleteContract(id)`
 
 ## Coding Conventions
 
@@ -80,12 +109,14 @@ npm run lint    # ESLint check
 
 - Auth state via `AuthProvider` context
 - Dashboard filters via local `useState`
-- Data fetching simulated with placeholder (ready for Supabase)
+- Data refresh triggered by `onProgressUpdate` callback
 
 ### Table Features
 
-- Sticky header and left columns (NO, CUSTOMER, contract name)
+- Sticky header and frozen left columns (NO, CUSTOMER, contract name)
 - Clickable progress cells → opens detail dialog
+- Admin edit icon on progress cell hover
+- Tooltip shows signature count breakdown
 - Filters: year, customer, invoice type, status, search
 
 ## Placeholder Mode
@@ -93,8 +124,9 @@ npm run lint    # ESLint check
 When Supabase is not configured (`NEXT_PUBLIC_SUPABASE_URL` missing):
 
 - Auth allows any email to "login"
-- Data loads from `generatePlaceholderData()`
+- Data loads from `generatePlaceholderData(year)`
 - Blue banner indicates demo mode
+- Admin features visible but don't persist changes
 
 ## Environment Setup
 
@@ -104,6 +136,18 @@ Copy `.env.example` to `.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
+
+## Supabase Schema (if using real database)
+
+Required tables:
+
+- `customers` (id, name, code, created_at)
+- `areas` (id, customer_id, name, code, created_at)
+- `bapp_contracts` (id, customer_id, area_id, name, period, invoice_type, notes, year, created_at)
+- `signatures` (id, contract_id, name, role, order)
+- `monthly_progress` (id, contract_id, month, year, upload_link, is_upload_completed, created_at, updated_at)
+- `signature_progress` (id, monthly_progress_id, signature_id, is_completed, completed_at)
+- `profiles` (id, email, full_name, role, created_at)
 
 ## Patterns to Follow
 
@@ -115,3 +159,4 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 - Keep Indonesian labels for UI text (JAN, FEB, etc.)
 - Use `@/` path alias for all imports
 - Use semantic color variables (`bg-background`, `text-foreground`) for theme consistency
+- For Supabase operations, check `isSupabaseConfigured()` before making calls

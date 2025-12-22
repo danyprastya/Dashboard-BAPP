@@ -1,18 +1,33 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ProgressDialog } from "./progress-dialog";
+import { TableLoadingSkeleton } from "@/components/ui/loading";
 import {
   getProgressColorClass,
   getStatusColorClass,
 } from "@/lib/placeholder-data";
+import { deleteContract } from "@/lib/supabase/data";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { showSuccessToast, showErrorToast } from "@/lib/toast";
 import type {
   CustomerWithAreas,
   DashboardFilters,
@@ -20,70 +35,40 @@ import type {
   ContractWithProgress,
 } from "@/types/database";
 import { MONTH_NAMES } from "@/types/database";
-import { Check, Minus, FileText } from "lucide-react";
+import { Info, Trash2, Loader2 } from "lucide-react";
 
 interface BAPPTableProps {
   data: CustomerWithAreas[];
   filters: DashboardFilters;
-  isLoading?: boolean;
+  isLoading: boolean;
+  isAdmin?: boolean;
+  onProgressUpdate?: () => void;
+  year?: number;
 }
 
-interface ProgressCellProps {
-  progress: MonthlyProgressDetail;
-  contractName: string;
-  onClick: () => void;
-}
-
-function ProgressCell({ progress, contractName, onClick }: ProgressCellProps) {
-  const hasProgress = progress.percentage > 0;
-  const isComplete = progress.percentage === 100;
-
-  return (
-    <TooltipProvider delayDuration={200}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={onClick}
-            className={`flex h-10 w-full min-w-[48px] items-center justify-center rounded-md border transition-all hover:scale-105 hover:shadow-sm ${getProgressColorClass(
-              progress.percentage
-            )}`}
-          >
-            {isComplete ? (
-              <Check className="h-4 w-4" />
-            ) : hasProgress ? (
-              <span className="text-xs font-medium">
-                {progress.percentage}%
-              </span>
-            ) : (
-              <Minus className="h-3 w-3 opacity-50" />
-            )}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-xs">
-          <div className="space-y-1">
-            <p className="font-medium">{contractName}</p>
-            <p className="text-xs text-muted-foreground">
-              Progress: {progress.percentage}%
-            </p>
-            <p className="text-xs">Klik untuk melihat detail</p>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
-export function BAPPTable({ data, filters, isLoading }: BAPPTableProps) {
+export function BAPPTable({
+  data,
+  filters,
+  isLoading,
+  isAdmin = false,
+  onProgressUpdate,
+  year = new Date().getFullYear(),
+}: BAPPTableProps) {
   const [selectedProgress, setSelectedProgress] =
     useState<MonthlyProgressDetail | null>(null);
-  const [selectedContractName, setSelectedContractName] = useState("");
+  const [selectedContract, setSelectedContract] =
+    useState<ContractWithProgress | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [contractToDelete, setContractToDelete] =
+    useState<ContractWithProgress | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Filter data based on filters
   const filteredData = useMemo(() => {
     return data
       .map((customer) => {
-        // Filter by customer if specified
+        // Filter by customer
         if (filters.customer_id && customer.id !== filters.customer_id) {
           return null;
         }
@@ -91,17 +76,20 @@ export function BAPPTable({ data, filters, isLoading }: BAPPTableProps) {
         const filteredAreas = customer.areas
           .map((area) => {
             const filteredContracts = area.contracts.filter((contract) => {
-              // Search filter
-              if (filters.search) {
-                const searchLower = filters.search.toLowerCase();
-                const matchesSearch =
-                  contract.name.toLowerCase().includes(searchLower) ||
-                  customer.name.toLowerCase().includes(searchLower) ||
-                  area.name.toLowerCase().includes(searchLower);
-                if (!matchesSearch) return false;
+              // Filter by search
+              if (
+                filters.search &&
+                !contract.name
+                  .toLowerCase()
+                  .includes(filters.search.toLowerCase()) &&
+                !customer.name
+                  .toLowerCase()
+                  .includes(filters.search.toLowerCase())
+              ) {
+                return false;
               }
 
-              // Invoice type filter
+              // Filter by invoice type
               if (
                 filters.invoice_type &&
                 contract.invoice_type !== filters.invoice_type
@@ -109,21 +97,20 @@ export function BAPPTable({ data, filters, isLoading }: BAPPTableProps) {
                 return false;
               }
 
-              // Status filter
-              if (filters.status !== "all") {
-                if (contract.yearly_status !== filters.status) {
-                  return false;
-                }
+              // Filter by status
+              if (
+                filters.status !== "all" &&
+                contract.yearly_status !== filters.status
+              ) {
+                return false;
               }
 
               return true;
             });
 
-            if (filteredContracts.length === 0) return null;
-
             return { ...area, contracts: filteredContracts };
           })
-          .filter(Boolean);
+          .filter((area) => area.contracts.length > 0);
 
         if (filteredAreas.length === 0) return null;
 
@@ -132,249 +119,352 @@ export function BAPPTable({ data, filters, isLoading }: BAPPTableProps) {
       .filter(Boolean) as CustomerWithAreas[];
   }, [data, filters]);
 
-  const handleCellClick = (
+  // Flatten data for easier row merging calculation
+  type FlatRow = {
+    customer: CustomerWithAreas;
+    area: CustomerWithAreas["areas"][0];
+    contract: ContractWithProgress;
+    rowNumber: number;
+    isFirstInCustomer: boolean;
+    customerRowSpan: number;
+    isFirstInContractGroup: boolean;
+    contractRowSpan: number;
+  };
+
+  const flattenedRows = useMemo(() => {
+    const rows: FlatRow[] = [];
+    let rowNum = 0;
+
+    filteredData.forEach((customer) => {
+      // Collect all contracts from all areas for this customer
+      const allContractsInCustomer: {
+        area: CustomerWithAreas["areas"][0];
+        contract: ContractWithProgress;
+      }[] = [];
+
+      customer.areas.forEach((area) => {
+        area.contracts.forEach((contract) => {
+          allContractsInCustomer.push({ area, contract });
+        });
+      });
+
+      // Sort by contract name to group same contracts together
+      allContractsInCustomer.sort((a, b) =>
+        a.contract.name.localeCompare(b.contract.name)
+      );
+
+      const totalContractsInCustomer = allContractsInCustomer.length;
+      let isFirstInCustomer = true;
+
+      allContractsInCustomer.forEach(({ area, contract }) => {
+        rowNum++;
+        rows.push({
+          customer,
+          area,
+          contract,
+          rowNumber: rowNum,
+          isFirstInCustomer,
+          customerRowSpan: totalContractsInCustomer,
+          isFirstInContractGroup: false, // Will be calculated below
+          contractRowSpan: 1, // Will be calculated below
+        });
+        isFirstInCustomer = false;
+      });
+    });
+
+    // Calculate contract name grouping within each customer
+    // Group rows with same contract name (now they are consecutive due to sorting)
+    let i = 0;
+    while (i < rows.length) {
+      const currentCustomerId = rows[i].customer.id;
+      const currentContractName = rows[i].contract.name;
+
+      // Find all rows with same customer and contract name
+      let groupSize = 1;
+      while (
+        i + groupSize < rows.length &&
+        rows[i + groupSize].customer.id === currentCustomerId &&
+        rows[i + groupSize].contract.name === currentContractName
+      ) {
+        groupSize++;
+      }
+
+      // Mark first row in group
+      rows[i].isFirstInContractGroup = true;
+      rows[i].contractRowSpan = groupSize;
+
+      i += groupSize;
+    }
+
+    return rows;
+  }, [filteredData]);
+
+  // Handle progress cell click
+  const handleProgressClick = (
     progress: MonthlyProgressDetail,
-    contractName: string
+    contract: ContractWithProgress
   ) => {
     setSelectedProgress(progress);
-    setSelectedContractName(contractName);
+    setSelectedContract(contract);
     setDialogOpen(true);
   };
 
-  // Calculate row numbers
-  let rowNumber = 0;
+  // Handle delete button click
+  const handleDeleteClick = (contract: ContractWithProgress) => {
+    setContractToDelete(contract);
+    setDeleteDialogOpen(true);
+  };
+
+  // Handle delete confirmation
+  const handleDeleteConfirm = async () => {
+    if (!contractToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      if (isSupabaseConfigured()) {
+        await deleteContract(contractToDelete.id);
+      }
+      showSuccessToast("Kontrak berhasil dihapus", {
+        description: contractToDelete.name,
+      });
+      setDeleteDialogOpen(false);
+      setContractToDelete(null);
+      onProgressUpdate?.();
+    } catch (error) {
+      console.error("Error deleting contract:", error);
+      showErrorToast(error, "Gagal Menghapus Kontrak");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   if (isLoading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">Memuat data...</p>
-        </div>
-      </div>
-    );
+    return <TableLoadingSkeleton rows={8} />;
   }
 
   if (filteredData.length === 0) {
     return (
-      <div className="flex h-64 flex-col items-center justify-center rounded-lg border border-dashed">
-        <FileText className="h-12 w-12 text-muted-foreground/50" />
-        <p className="mt-4 text-lg font-medium">Tidak ada data</p>
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
+        <Info className="mb-4 h-12 w-12 text-muted-foreground" />
+        <h3 className="text-lg font-medium">Tidak ada data</h3>
         <p className="text-sm text-muted-foreground">
-          Coba ubah filter pencarian Anda
+          Tidak ada kontrak yang sesuai dengan filter yang dipilih.
         </p>
       </div>
     );
   }
 
   return (
-    <>
-      <div className="relative overflow-hidden rounded-lg border">
-        <div className="overflow-auto max-h-[calc(100vh-280px)]">
-          <table className="w-full border-collapse text-sm">
-            {/* Header */}
-            <thead className="sticky top-0 z-20 bg-neutral-100 dark:bg-neutral-900">
-              <tr>
+    <TooltipProvider>
+      <div className="relative bg-card h-full overflow-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead className="sticky top-0 z-30">
+            <tr className="border-b bg-muted">
+              <th className="sticky left-0 z-40 w-12 border-r bg-muted px-3 py-3 text-center font-medium">
+                NO
+              </th>
+              <th className="sticky left-12 z-40 w-32 border-r bg-muted px-3 py-3 text-left font-medium">
+                CUSTOMER
+              </th>
+              <th className="sticky left-44 z-40 w-[200px] border-r bg-muted px-3 py-3 text-left font-medium">
+                NAMA KONTRAK
+              </th>
+              <th className="sticky left-[calc(11rem+200px)] z-40 w-[180px] border-r bg-muted px-3 py-3 text-left font-medium">
+                AREA
+              </th>
+              <th className="w-20 border-r bg-muted px-3 py-3 text-center font-medium">
+                PERIODE
+              </th>
+              {MONTH_NAMES.map((month) => (
                 <th
-                  className="sticky left-0 z-30 min-w-[50px] border-b border-r bg-neutral-100 px-3 py-3 text-center font-semibold dark:bg-neutral-900"
-                  rowSpan={2}
+                  key={month}
+                  className="w-16 border-r bg-muted px-2 py-3 text-center font-medium"
                 >
-                  NO
+                  {month}
                 </th>
-                <th
-                  className="sticky left-[50px] z-30 min-w-[120px] border-b border-r bg-neutral-100 px-3 py-3 text-left font-semibold dark:bg-neutral-900"
-                  rowSpan={2}
-                >
-                  CUSTOMER
+              ))}
+              <th className="w-24 border-r bg-muted px-3 py-3 text-center font-medium">
+                REG / PUSAT
+              </th>
+              <th className="w-20 bg-muted px-3 py-3 text-center font-medium">
+                STATUS
+              </th>
+              {isAdmin && (
+                <th className="w-16 bg-muted px-3 py-3 text-center font-medium">
+                  AKSI
                 </th>
-                <th
-                  className="sticky left-[170px] z-30 min-w-[280px] border-b border-r bg-neutral-100 px-3 py-3 text-left font-semibold dark:bg-neutral-900"
-                  colSpan={2}
-                >
-                  NAMA CHEKLIST / BA / BAPP
-                </th>
-                <th
-                  className="min-w-[80px] border-b border-r bg-neutral-100 px-3 py-3 text-center font-semibold dark:bg-neutral-900"
-                  rowSpan={2}
-                >
-                  PERIODE
-                </th>
-                <th
-                  className="border-b bg-neutral-100 px-3 py-3 text-center font-semibold dark:bg-neutral-900"
-                  colSpan={12}
-                >
-                  BULAN
-                </th>
-                <th
-                  className="border-b border-l bg-neutral-100 px-3 py-3 text-center font-semibold dark:bg-neutral-900"
-                  colSpan={2}
-                >
-                  INVOICE
-                </th>
-                <th
-                  className="min-w-[150px] border-b border-l bg-neutral-100 px-3 py-3 text-left font-semibold dark:bg-neutral-900"
-                  rowSpan={2}
-                >
-                  KETERANGAN
-                </th>
-              </tr>
-              <tr>
-                <th className="sticky left-[170px] z-30 min-w-[40px] border-b border-r bg-neutral-100 px-2 py-2 text-center text-xs font-medium dark:bg-neutral-900">
-                  &nbsp;
-                </th>
-                <th className="sticky left-[210px] z-30 min-w-[240px] border-b border-r bg-neutral-100 px-2 py-2 text-left text-xs font-medium dark:bg-neutral-900">
-                  Nama
-                </th>
-                {MONTH_NAMES.map((month) => (
-                  <th
-                    key={month}
-                    className="min-w-[52px] border-b border-r bg-neutral-100 px-1 py-2 text-center text-xs font-medium dark:bg-neutral-900"
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {flattenedRows.map((row) => (
+              <tr
+                key={row.contract.id + "-" + row.area.id}
+                className="border transition-colors hover:bg-muted/30"
+              >
+                {/* Row number - sticky */}
+                <td className="sticky left-0 z-10 border-r bg-background px-3 py-2 text-center font-medium">
+                  {row.rowNumber}
+                </td>
+
+                {/* Customer name - sticky with rowspan */}
+                {row.isFirstInCustomer && (
+                  <td
+                    rowSpan={row.customerRowSpan}
+                    className="sticky left-0 z-10 border bg-background px-3 py-2 font-medium align-middle"
                   >
-                    {month}
-                  </th>
+                    {row.customer.name}
+                  </td>
+                )}
+
+                {/* Contract name - sticky with rowspan for same names */}
+                {row.isFirstInContractGroup && (
+                  <td
+                    rowSpan={row.contractRowSpan}
+                    className="sticky left-0 z-10 w-50 border bg-background px-3 py-2 align-middle"
+                  >
+                    <div className="w-45">
+                      <div className="font-medium wrap-break-word">
+                        {row.contract.name}
+                      </div>
+                      {row.contract.notes && (
+                        <div className="mt-1 text-xs text-muted-foreground wrap-break-word">
+                          {row.contract.notes}
+                        </div>
+                      )}
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {row.contract.total_signatures} tanda tangan
+                      </div>
+                    </div>
+                  </td>
+                )}
+
+                {/* Area - sticky with fixed width */}
+                <td className="sticky left-0 z-10 w-45 border bg-background px-3 py-2 align-middle">
+                  <div className="w-40 wrap-break-word text-muted-foreground">
+                    {row.area.name}
+                  </div>
+                </td>
+
+                {/* Period */}
+                <td className="border-r px-3 py-2 text-center text-muted-foreground">
+                  {row.contract.period}
+                </td>
+
+                {/* Monthly progress cells */}
+                {row.contract.monthly_progress.map((progress) => (
+                  <td key={progress.month} className="border-r px-1 py-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() =>
+                            handleProgressClick(progress, row.contract)
+                          }
+                          className={`flex h-8 w-full items-center justify-center rounded text-xs font-medium transition-all hover:ring-2 hover:ring-primary/50 ${getProgressColorClass(
+                            progress.percentage
+                          )}`}
+                        >
+                          {progress.percentage}%
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          {progress.completed_items}/{progress.total_items} item
+                          selesai
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Klik untuk detail
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </td>
                 ))}
-                <th className="min-w-[90px] border-b border-r bg-neutral-100 px-2 py-2 text-center text-xs font-medium dark:bg-neutral-900">
-                  REG / PUSAT
-                </th>
-                <th className="min-w-[60px] border-b bg-neutral-100 px-2 py-2 text-center text-xs font-medium dark:bg-neutral-900">
-                  CHECK
-                </th>
+
+                {/* Invoice type */}
+                <td className="border-r px-3 py-2 text-center">
+                  <Badge variant="outline" className="text-xs">
+                    {row.contract.invoice_type}
+                  </Badge>
+                </td>
+
+                {/* Status */}
+                <td className="px-3 py-2 text-center">
+                  <Badge
+                    className={`text-xs ${getStatusColorClass(
+                      row.contract.yearly_status
+                    )}`}
+                  >
+                    {row.contract.yearly_status === "completed"
+                      ? "Selesai"
+                      : row.contract.yearly_status === "in_progress"
+                      ? "Proses"
+                      : "Belum"}
+                  </Badge>
+                </td>
+
+                {/* Delete Action */}
+                {isAdmin && (
+                  <td className="px-3 py-2 text-center">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDeleteClick(row.contract)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Hapus kontrak</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </td>
+                )}
               </tr>
-            </thead>
-
-            {/* Body */}
-            <tbody>
-              {filteredData.map((customer) => {
-                const totalContracts = customer.areas.reduce(
-                  (sum, area) => sum + area.contracts.length,
-                  0
-                );
-                let isFirstCustomerRow = true;
-
-                return customer.areas.flatMap((area) =>
-                  area.contracts.map((contract, contractIndex) => {
-                    rowNumber++;
-                    const isFirstInArea = contractIndex === 0;
-                    const showCustomer = isFirstCustomerRow;
-                    if (isFirstCustomerRow) isFirstCustomerRow = false;
-
-                    // Calculate yearly completion
-                    const yearlyProgress = Math.round(
-                      contract.monthly_progress.reduce(
-                        (sum, m) => sum + m.percentage,
-                        0
-                      ) / 12
-                    );
-
-                    return (
-                      <tr
-                        key={contract.id}
-                        className="border-b transition-colors hover:bg-muted/50"
-                      >
-                        {/* Row Number */}
-                        <td className="sticky left-0 z-10 border-r bg-background px-3 py-2 text-center font-medium">
-                          {showCustomer ? rowNumber : ""}
-                        </td>
-
-                        {/* Customer */}
-                        <td className="sticky left-[50px] z-10 border-r bg-background px-3 py-2 font-medium">
-                          {showCustomer && (
-                            <span className="inline-block max-w-[100px] truncate">
-                              {customer.name}
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Area Code */}
-                        <td className="sticky left-[170px] z-10 border-r bg-background px-2 py-2 text-center text-xs">
-                          {area.code}
-                        </td>
-
-                        {/* Contract Name */}
-                        <td className="sticky left-[210px] z-10 border-r bg-background px-2 py-2">
-                          <span className="inline-block max-w-[230px] truncate text-xs">
-                            {contract.name}
-                          </span>
-                        </td>
-
-                        {/* Period */}
-                        <td className="border-r px-2 py-2 text-center text-xs">
-                          {contract.period}
-                        </td>
-
-                        {/* Monthly Progress Cells */}
-                        {contract.monthly_progress.map(
-                          (progress, monthIndex) => (
-                            <td key={monthIndex} className="border-r px-1 py-1">
-                              <ProgressCell
-                                progress={progress}
-                                contractName={contract.name}
-                                onClick={() =>
-                                  handleCellClick(progress, contract.name)
-                                }
-                              />
-                            </td>
-                          )
-                        )}
-
-                        {/* Invoice Type */}
-                        <td className="border-r px-2 py-2 text-center">
-                          <Badge
-                            variant="secondary"
-                            className={`text-xs ${
-                              contract.invoice_type === "Pusat"
-                                ? "bg-neutral-100 dark:bg-neutral-800"
-                                : contract.invoice_type === "Regional 2"
-                                ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
-                                : "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
-                            }`}
-                          >
-                            {contract.invoice_type}
-                          </Badge>
-                        </td>
-
-                        {/* Yearly Status Check */}
-                        <td className="border-r px-2 py-2 text-center">
-                          <div
-                            className={`mx-auto flex h-7 w-7 items-center justify-center rounded ${getStatusColorClass(
-                              contract.yearly_status
-                            )}`}
-                          >
-                            {contract.yearly_status === "completed" ? (
-                              <Check className="h-4 w-4" />
-                            ) : (
-                              <span className="text-xs font-medium">
-                                {yearlyProgress}%
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Notes */}
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
-                          {contract.notes && (
-                            <span className="inline-block max-w-[140px] truncate">
-                              {contract.notes}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      {/* Progress Dialog */}
+      {/* Progress Detail Dialog with Edit capability */}
       <ProgressDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         progress={selectedProgress}
-        contractName={selectedContractName}
+        contract={selectedContract}
+        contractName={selectedContract?.name || ""}
+        isAdmin={isAdmin}
+        year={year}
+        onProgressUpdate={onProgressUpdate}
       />
-    </>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Kontrak</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus kontrak{" "}
+              <strong>&quot;{contractToDelete?.name}&quot;</strong>? Semua data
+              progress dan tanda tangan terkait akan ikut terhapus. Tindakan ini
+              tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </TooltipProvider>
   );
 }

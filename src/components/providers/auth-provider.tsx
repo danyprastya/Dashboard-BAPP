@@ -24,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!supabase) {
       // Placeholder mode - simulate logged in user for development
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsPlaceholderMode(true);
       setUser({
         id: "placeholder-user",

@@ -19,6 +19,7 @@ export interface Area {
 
 export interface BAPPContract {
   id: string;
+  customer_id: string;
   area_id: string;
   name: string;
   period: string; // e.g., "1 bulan", "3 bulan"
@@ -45,6 +46,7 @@ export interface MonthlyProgress {
   year: number;
   upload_link: string | null;
   is_upload_completed: boolean;
+  notes: string | null; // Catatan untuk bulan ini
   created_at: string;
   updated_at: string;
 }
@@ -59,28 +61,38 @@ export interface SignatureProgress {
 }
 
 // Computed/View Types for Frontend
+export interface SignatureDetail {
+  id: string;
+  name: string;
+  role: string;
+  order: number;
+  is_completed: boolean;
+  completed_at: string | null;
+}
+
 export interface MonthlyProgressDetail {
+  id: string | null;
   month: number;
   year: number;
-  signatures: {
-    id: string;
-    name: string;
-    role: string;
-    is_completed: boolean;
-    completed_at: string | null;
-  }[];
+  signatures: SignatureDetail[];
   is_upload_completed: boolean;
   upload_link: string | null;
+  notes: string | null; // Catatan untuk bulan ini
   percentage: number;
+  total_items: number; // total signatures + 1 (upload)
+  completed_items: number;
 }
 
 export interface ContractWithProgress {
   id: string;
+  customer_id: string;
+  area_id: string;
   name: string;
   period: string;
   invoice_type: "Pusat" | "Regional 2" | "Regional 3";
   notes: string | null;
   total_signatures: number;
+  signatures: Signature[];
   monthly_progress: MonthlyProgressDetail[];
   yearly_status: "completed" | "in_progress" | "not_started";
 }
@@ -99,7 +111,7 @@ export interface CustomerWithAreas {
 }
 
 // Auth Types
-export interface User {
+export interface UserProfile {
   id: string;
   email: string;
   full_name: string | null;
@@ -116,6 +128,18 @@ export interface DashboardFilters {
   status: "all" | "completed" | "in_progress" | "not_started";
 }
 
+// Form Types for CRUD
+export interface ContractFormData {
+  customer_id: string;
+  area_id: string;
+  name: string;
+  period: string;
+  invoice_type: "Pusat" | "Regional 2" | "Regional 3";
+  notes: string;
+  year: number;
+  signatures: { name: string; role: string }[];
+}
+
 // Month names in Indonesian
 export const MONTH_NAMES = [
   "JAN", "FEB", "MAR", "APR", "MEI", "JUN",
@@ -126,3 +150,15 @@ export const MONTH_NAMES_FULL = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
   "Juli", "Agustus", "September", "Oktober", "November", "Desember"
 ] as const;
+
+// Helper function to calculate percentage dynamically
+export function calculateProgress(
+  completedSignatures: number,
+  totalSignatures: number,
+  isUploadCompleted: boolean
+): { percentage: number; totalItems: number; completedItems: number } {
+  const totalItems = totalSignatures + 1; // signatures + upload
+  const completedItems = completedSignatures + (isUploadCompleted ? 1 : 0);
+  const percentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+  return { percentage, totalItems, completedItems };
+}

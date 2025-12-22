@@ -51,6 +51,27 @@ next-env.d.ts
 .vscode/
 *.swp
 *.swo
+*.sublime-project
+*.sublime-workspace
 
 # Supabase
 .supabase/
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Optional: Lock files (uncomment if you want to ignore)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

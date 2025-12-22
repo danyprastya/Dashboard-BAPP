@@ -2,46 +2,106 @@ import {
   CustomerWithAreas,
   MonthlyProgressDetail,
   ContractWithProgress,
+  SignatureDetail,
+  Signature,
 } from "@/types/database";
 
-// Helper to generate random progress data
+// Helper to generate random progress data with dynamic signature count
 function generateMonthlyProgress(
   totalSignatures: number,
-  monthIndex: number
+  monthIndex: number,
+  year: number
 ): MonthlyProgressDetail {
   const currentMonth = new Date().getMonth();
-  const isPastMonth = monthIndex < currentMonth;
-  const isCurrentMonth = monthIndex === currentMonth;
+  const currentYear = new Date().getFullYear();
+  const isPastMonth = year < currentYear || (year === currentYear && monthIndex < currentMonth);
+  const isCurrentMonth = year === currentYear && monthIndex === currentMonth;
 
   // Past months are mostly completed, current month is partial
   const completionChance = isPastMonth ? 0.85 : isCurrentMonth ? 0.5 : 0.1;
 
-  const signatures = Array.from({ length: totalSignatures }, (_, i) => ({
+  const signatures: SignatureDetail[] = Array.from({ length: totalSignatures }, (_, i) => ({
     id: `sig-${i}`,
     name: `Penandatangan ${i + 1}`,
-    role: i === 0 ? "Manager" : i === 1 ? "Supervisor" : "Staff",
+    role: i === 0 ? "Manager" : i === 1 ? "Supervisor" : i === 2 ? "Staff" : `Pihak ${i + 1}`,
+    order: i + 1,
     is_completed: Math.random() < completionChance,
     completed_at: Math.random() < completionChance ? new Date().toISOString() : null,
   }));
 
   const isUploadCompleted = Math.random() < completionChance;
-  const totalItems = totalSignatures + 1; // signatures + upload
+  const totalItems = totalSignatures + 1; // signatures + upload (dynamic based on signature count)
   const completedItems =
     signatures.filter((s) => s.is_completed).length + (isUploadCompleted ? 1 : 0);
-  const percentage = Math.round((completedItems / totalItems) * 100);
+  const percentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
   return {
+    id: null,
     month: monthIndex + 1,
-    year: new Date().getFullYear(),
+    year: year,
     signatures,
     is_upload_completed: isUploadCompleted,
     upload_link: isUploadCompleted ? "https://example.com/upload" : null,
+    notes: null, // No notes in placeholder data
     percentage,
+    total_items: totalItems,
+    completed_items: completedItems,
   };
 }
 
+// Calculate yearly status based on monthly progress
+export function calculateYearlyStatus(
+  contract: ContractWithProgress
+): "completed" | "in_progress" | "not_started" {
+  const allCompleted = contract.monthly_progress.every(
+    (m) => m.percentage === 100
+  );
+  const anyStarted = contract.monthly_progress.some((m) => m.percentage > 0);
+
+  if (allCompleted) return "completed";
+  if (anyStarted) return "in_progress";
+  return "not_started";
+}
+
 // Generate placeholder data that matches the screenshot structure
-export function generatePlaceholderData(): CustomerWithAreas[] {
+export function generatePlaceholderData(year: number = new Date().getFullYear()): CustomerWithAreas[] {
+  // Helper to create contract with variable signature count
+  const createContract = (
+    id: string,
+    customerId: string,
+    areaId: string,
+    name: string,
+    period: string,
+    invoiceType: "Pusat" | "Regional 2" | "Regional 3",
+    notes: string | null,
+    signatureCount: number
+  ): ContractWithProgress => {
+    const signatures: Signature[] = Array.from({ length: signatureCount }, (_, i) => ({
+      id: `${id}-sig-${i}`,
+      contract_id: id,
+      name: `Penandatangan ${i + 1}`,
+      role: i === 0 ? "Manager" : i === 1 ? "Supervisor" : i === 2 ? "Staff" : `Pihak ${i + 1}`,
+      order: i + 1,
+      created_at: new Date().toISOString(),
+    }));
+
+    return {
+      id,
+      customer_id: customerId,
+      area_id: areaId,
+      name,
+      period,
+      invoice_type: invoiceType,
+      notes,
+      total_signatures: signatureCount,
+      signatures,
+      monthly_progress: Array.from({ length: 12 }, (_, i) =>
+        generateMonthlyProgress(signatureCount, i, year)
+      ),
+      yearly_status: "in_progress",
+    };
+  };
+
   const data: CustomerWithAreas[] = [
     {
       id: "1",
@@ -52,42 +112,9 @@ export function generatePlaceholderData(): CustomerWithAreas[] {
           name: "",
           code: "a",
           contracts: [
-            {
-              id: "1a1",
-              name: "CHEKLIST DIGISLAM / REKAP SLA GEDUNG",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "1a2",
-              name: "BAP PENGAMANAN",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "1a3",
-              name: "BAP MO KELISTRIKAN",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
+            createContract("1a1", "1", "1a", "CHEKLIST DIGISLAM / REKAP SLA GEDUNG", "1 bulan", "Pusat", null, 3),
+            createContract("1a2", "1", "1a", "BAP PENGAMANAN", "1 bulan", "Pusat", null, 2),
+            createContract("1a3", "1", "1a", "BAP MO KELISTRIKAN", "1 bulan", "Pusat", null, 3),
           ],
         },
       ],
@@ -101,102 +128,14 @@ export function generatePlaceholderData(): CustomerWithAreas[] {
           name: "",
           code: "a",
           contracts: [
-            {
-              id: "2a1",
-              name: "FMC PELAYANAN & BACK OFFICE",
-              period: "1 bulan",
-              invoice_type: "Regional 2",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "2a2",
-              name: "TTC SOETA",
-              period: "1 bulan",
-              invoice_type: "Regional 3",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "2a3",
-              name: "TTC DAGO",
-              period: "1 bulan",
-              invoice_type: "Regional 3",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "2a4",
-              name: "WAREHOUSE (GUDANG)",
-              period: "1 bulan",
-              invoice_type: "Regional 3",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "2a5",
-              name: "OMU SHOP NONMALL DAGO",
-              period: "1 bulan",
-              invoice_type: "Regional 3",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "2a6",
-              name: "OMU BRANCH REG (SOETA)",
-              period: "1 bulan",
-              invoice_type: "Regional 2",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "2a7",
-              name: "OMU BRANCH BDG WINDU",
-              period: "1 bulan",
-              invoice_type: "Regional 2",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "2a8",
-              name: "OMU BRANCH SOREANG",
-              period: "1 bulan",
-              invoice_type: "Regional 2",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
+            createContract("2a1", "2", "2a", "FMC PELAYANAN & BACK OFFICE", "1 bulan", "Regional 2", null, 3),
+            createContract("2a2", "2", "2a", "TTC SOETA", "1 bulan", "Regional 3", null, 3),
+            createContract("2a3", "2", "2a", "TTC DAGO", "1 bulan", "Regional 3", null, 2),
+            createContract("2a4", "2", "2a", "WAREHOUSE (GUDANG)", "1 bulan", "Regional 3", null, 3),
+            createContract("2a5", "2", "2a", "OMU SHOP NONMALL DAGO", "1 bulan", "Regional 3", null, 4),
+            createContract("2a6", "2", "2a", "OMU BRANCH REG (SOETA)", "1 bulan", "Regional 2", null, 3),
+            createContract("2a7", "2", "2a", "OMU BRANCH BDG WINDU", "1 bulan", "Regional 2", null, 2),
+            createContract("2a8", "2", "2a", "OMU BRANCH SOREANG", "1 bulan", "Regional 2", null, 3),
           ],
         },
       ],
@@ -210,30 +149,8 @@ export function generatePlaceholderData(): CustomerWithAreas[] {
           name: "",
           code: "a",
           contracts: [
-            {
-              id: "3a1",
-              name: "BR SC GEDUNG",
-              period: "3 bulan",
-              invoice_type: "Pusat",
-              notes: "Mulai TW2 Rekon & BAPP sudah di Reg 2",
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "3a2",
-              name: "Pemakaian KBM R2 & R4",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
+            createContract("3a1", "3", "3a", "BR SC GEDUNG", "3 bulan", "Pusat", "Mulai TW2 Rekon & BAPP sudah di Reg 2", 3),
+            createContract("3a2", "3", "3a", "Pemakaian KBM R2 & R4", "1 bulan", "Pusat", null, 2),
           ],
         },
       ],
@@ -247,42 +164,9 @@ export function generatePlaceholderData(): CustomerWithAreas[] {
           name: "",
           code: "a",
           contracts: [
-            {
-              id: "4a1",
-              name: "GEDUNG / BR",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "4a2",
-              name: "GEDUNG / SC",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "4a3",
-              name: "LISTRIK",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
+            createContract("4a1", "4", "4a", "GEDUNG / BR", "1 bulan", "Pusat", null, 3),
+            createContract("4a2", "4", "4a", "GEDUNG / SC", "1 bulan", "Pusat", null, 3),
+            createContract("4a3", "4", "4a", "LISTRIK", "1 bulan", "Pusat", null, 2),
           ],
         },
       ],
@@ -296,42 +180,9 @@ export function generatePlaceholderData(): CustomerWithAreas[] {
           name: "",
           code: "a",
           contracts: [
-            {
-              id: "5a1",
-              name: "CORPU",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "5a2",
-              name: "SENTOT",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "5a3",
-              name: "BUAH BATU",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
+            createContract("5a1", "5", "5a", "CORPU", "1 bulan", "Pusat", null, 3),
+            createContract("5a2", "5", "5a", "SENTOT", "1 bulan", "Pusat", null, 4),
+            createContract("5a3", "5", "5a", "BUAH BATU", "1 bulan", "Pusat", null, 3),
           ],
         },
       ],
@@ -345,42 +196,9 @@ export function generatePlaceholderData(): CustomerWithAreas[] {
           name: "",
           code: "a",
           contracts: [
-            {
-              id: "6a1",
-              name: "BA Pemeriksaan & BA Pelaksanaan BR & SC Gedung CISANGGARUNG",
-              period: "1 bulan",
-              invoice_type: "Regional 3",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "6a2",
-              name: "Jasa Tenaga Keamanan CISANGGARUNG",
-              period: "1 bulan",
-              invoice_type: "Regional 3",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "6a3",
-              name: "SC Gedung RUSUNAWA",
-              period: "1 bulan",
-              invoice_type: "Regional 3",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
+            createContract("6a1", "6", "6a", "BA Pemeriksaan & BA Pelaksanaan BR & SC Gedung CISANGGARUNG", "1 bulan", "Regional 3", null, 3),
+            createContract("6a2", "6", "6a", "Jasa Tenaga Keamanan CISANGGARUNG", "1 bulan", "Regional 3", null, 2),
+            createContract("6a3", "6", "6a", "SC Gedung RUSUNAWA", "1 bulan", "Regional 3", null, 3),
           ],
         },
       ],
@@ -394,78 +212,12 @@ export function generatePlaceholderData(): CustomerWithAreas[] {
           name: "",
           code: "a",
           contracts: [
-            {
-              id: "7a1",
-              name: "SC Gedung SENTOT",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "7a2",
-              name: "BR Gedung BUAH BATU",
-              period: "3 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "7a3",
-              name: "SC Gedung BUAH BATU",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "7a4",
-              name: "SC & Jasa Security CISANGGARUNG",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "7a5",
-              name: "SC & Jasa Security CILIWUNG",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "7a6",
-              name: "Gedung CORPU",
-              period: "1 bulan",
-              invoice_type: "Pusat",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
+            createContract("7a1", "7", "7a", "SC Gedung SENTOT", "1 bulan", "Pusat", null, 3),
+            createContract("7a2", "7", "7a", "BR Gedung BUAH BATU", "3 bulan", "Pusat", null, 4),
+            createContract("7a3", "7", "7a", "SC Gedung BUAH BATU", "1 bulan", "Pusat", null, 3),
+            createContract("7a4", "7", "7a", "SC & Jasa Security CISANGGARUNG", "1 bulan", "Pusat", null, 2),
+            createContract("7a5", "7", "7a", "SC & Jasa Security CILIWUNG", "1 bulan", "Pusat", null, 2),
+            createContract("7a6", "7", "7a", "Gedung CORPU", "1 bulan", "Pusat", null, 3),
           ],
         },
       ],
@@ -491,51 +243,25 @@ export function generatePlaceholderData(): CustomerWithAreas[] {
           name: "",
           code: "a",
           contracts: [
-            {
-              id: "9a1",
-              name: "PBF (Pemeliharaan Bangunan & Fasilitas)",
-              period: "1 bulan",
-              invoice_type: "Regional 3",
-              notes: null,
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
-            {
-              id: "9a2",
-              name: "Pemeliharaan AC / AHU",
-              period: "2 bulan",
-              invoice_type: "Regional 3",
-              notes: "Invoice Terakhir Periode Feb",
-              total_signatures: 3,
-              monthly_progress: Array.from({ length: 12 }, (_, i) =>
-                generateMonthlyProgress(3, i)
-              ),
-              yearly_status: "in_progress",
-            },
+            createContract("9a1", "9", "9a", "PBF (Pemeliharaan Bangunan & Fasilitas)", "1 bulan", "Regional 3", null, 3),
+            createContract("9a2", "9", "9a", "Pemeliharaan AC / AHU", "2 bulan", "Regional 3", "Invoice Terakhir Periode Feb", 2),
           ],
         },
       ],
     },
   ];
 
-  return data;
-}
-
-// Calculate yearly status based on monthly progress
-export function calculateYearlyStatus(
-  contract: ContractWithProgress
-): "completed" | "in_progress" | "not_started" {
-  const allCompleted = contract.monthly_progress.every(
-    (m) => m.percentage === 100
-  );
-  const anyStarted = contract.monthly_progress.some((m) => m.percentage > 0);
-
-  if (allCompleted) return "completed";
-  if (anyStarted) return "in_progress";
-  return "not_started";
+  // Update yearly status based on generated progress
+  return data.map((customer) => ({
+    ...customer,
+    areas: customer.areas.map((area) => ({
+      ...area,
+      contracts: area.contracts.map((contract) => ({
+        ...contract,
+        yearly_status: calculateYearlyStatus(contract),
+      })),
+    })),
+  }));
 }
 
 // Get progress color class based on percentage (soft colors)

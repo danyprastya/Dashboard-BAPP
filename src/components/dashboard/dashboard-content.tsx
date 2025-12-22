@@ -1,17 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
 import { DashboardHeader } from "./header";
 import { DashboardFiltersBar } from "./filters";
 import { BAPPTable } from "./bapp-table";
+import { ContractFormDialog } from "./contract-form-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading";
 import {
   generatePlaceholderData,
   calculateYearlyStatus,
 } from "@/lib/placeholder-data";
+import { fetchDashboardData } from "@/lib/supabase/data";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { CustomerWithAreas, DashboardFilters } from "@/types/database";
 import {
   FileText,
@@ -19,12 +22,15 @@ import {
   Clock,
   AlertCircle,
   Building2,
+  Plus,
+  HelpCircle,
 } from "lucide-react";
 
 export function DashboardContent() {
-  const { loading: authLoading, isPlaceholderMode } = useAuth();
+  const { loading: authLoading, isPlaceholderMode, user } = useAuth();
   const [data, setData] = useState<CustomerWithAreas[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showContractDialog, setShowContractDialog] = useState(false);
   const [filters, setFilters] = useState<DashboardFilters>({
     year: new Date().getFullYear(),
     search: "",
@@ -33,53 +39,78 @@ export function DashboardContent() {
     status: "all",
   });
 
-  // Fetch data (or use placeholder)
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
+  // For demo purposes, treat logged in users as admin
+  // In production, you'd check user.role or user_metadata
+  const isAdmin = !!user;
 
+  // Fetch data function
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+
+    try {
       // Simulate loading delay
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      if (isPlaceholderMode) {
-        // Use placeholder data
-        const placeholderData = generatePlaceholderData();
-        // Update yearly status
-        const dataWithStatus = placeholderData.map((customer) => ({
-          ...customer,
-          areas: customer.areas.map((area) => ({
-            ...area,
-            contracts: area.contracts.map((contract) => ({
-              ...contract,
-              yearly_status: calculateYearlyStatus(contract),
-            })),
-          })),
-        }));
-        setData(dataWithStatus);
+      let fetchedData: CustomerWithAreas[];
+
+      if (isSupabaseConfigured() && !isPlaceholderMode) {
+        // Fetch from Supabase
+        fetchedData = await fetchDashboardData(filters.year);
       } else {
-        // TODO: Fetch from Supabase
-        // For now, still use placeholder
-        const placeholderData = generatePlaceholderData();
-        const dataWithStatus = placeholderData.map((customer) => ({
-          ...customer,
-          areas: customer.areas.map((area) => ({
-            ...area,
-            contracts: area.contracts.map((contract) => ({
-              ...contract,
-              yearly_status: calculateYearlyStatus(contract),
-            })),
-          })),
-        }));
-        setData(dataWithStatus);
+        // Use placeholder data
+        fetchedData = generatePlaceholderData(filters.year);
       }
 
-      setIsLoading(false);
-    };
+      // Update yearly status
+      const dataWithStatus = fetchedData.map((customer) => ({
+        ...customer,
+        areas: customer.areas.map((area) => ({
+          ...area,
+          contracts: area.contracts.map((contract) => ({
+            ...contract,
+            yearly_status: calculateYearlyStatus(contract),
+          })),
+        })),
+      }));
 
-    if (!authLoading) {
-      fetchData();
+      setData(dataWithStatus);
+    } catch (error) {
+      console.error("Error loading data:", error);
+      // Fallback to placeholder on error
+      const placeholderData = generatePlaceholderData(filters.year);
+      const dataWithStatus = placeholderData.map((customer) => ({
+        ...customer,
+        areas: customer.areas.map((area) => ({
+          ...area,
+          contracts: area.contracts.map((contract) => ({
+            ...contract,
+            yearly_status: calculateYearlyStatus(contract),
+          })),
+        })),
+      }));
+      setData(dataWithStatus);
+    } finally {
+      setIsLoading(false);
     }
-  }, [authLoading, isPlaceholderMode, filters.year]);
+  }, [filters.year, isPlaceholderMode]);
+
+  // Fetch data on mount and when year changes
+  useEffect(() => {
+    if (!authLoading) {
+      loadData();
+    }
+  }, [authLoading, loadData]);
+
+  // Handle progress update (refresh data)
+  const handleProgressUpdate = () => {
+    loadData();
+  };
+
+  // Handle contract save
+  const handleContractSave = () => {
+    setShowContractDialog(false);
+    loadData();
+  };
 
   // Calculate statistics
   const stats = {
@@ -138,13 +169,19 @@ export function DashboardContent() {
       <main className="container mx-auto px-4 py-6 sm:px-6 lg:px-8">
         <div className="space-y-6">
           {/* Page Title */}
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Monitoring Kontrak BAPP
-            </h1>
-            <p className="text-muted-foreground">
-              Pantau progress kontrak BAPP untuk semua customer dan daerah
-            </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">
+                Monitoring Kontrak BAPP
+              </h1>
+              <p className="text-muted-foreground">
+                Pantau progress kontrak BAPP untuk semua customer dan daerah
+              </p>
+            </div>
+            <Button onClick={() => setShowContractDialog(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Tambah Kontrak
+            </Button>
           </div>
 
           {/* Statistics Cards */}
@@ -213,9 +250,11 @@ export function DashboardContent() {
               </CardContent>
             </Card>
           </div>
+        </div>
 
-          {/* Filters */}
-          <Card>
+        {/* Sticky Filter Section */}
+        <div className="sticky top-16 z-30 bg-background pt-4 pb-2">
+          <Card className="shadow-sm">
             <CardContent className="pt-6">
               <DashboardFiltersBar
                 filters={filters}
@@ -226,7 +265,7 @@ export function DashboardContent() {
           </Card>
 
           {/* Progress Legend */}
-          <div className="flex flex-wrap items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-4 text-sm mt-4 px-1">
             <span className="text-muted-foreground">Keterangan Progress:</span>
             <div className="flex items-center gap-2">
               <div className="h-4 w-4 rounded bg-emerald-100 dark:bg-emerald-950" />
@@ -252,11 +291,36 @@ export function DashboardContent() {
               <div className="h-4 w-4 rounded bg-neutral-100 dark:bg-neutral-800" />
               <span>0%</span>
             </div>
+            <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+              <HelpCircle className="h-3 w-3" />
+              <span>
+                Kontrak dengan nama yang sama akan digabung barisnya secara
+                otomatis
+              </span>
+            </div>
           </div>
-
-          {/* BAPP Table */}
-          <BAPPTable data={data} filters={filters} isLoading={isLoading} />
         </div>
+
+        {/* BAPP Table - Taller with more padding */}
+        <div className="mt-4 pb-8">
+          <div className="h-[calc(100vh-320px)] min-h-[500px] overflow-auto rounded-lg border shadow-sm">
+            <BAPPTable
+              data={data}
+              filters={filters}
+              isLoading={isLoading}
+              isAdmin={isAdmin}
+              onProgressUpdate={handleProgressUpdate}
+              year={filters.year}
+            />
+          </div>
+        </div>
+
+        {/* Contract Form Dialog */}
+        <ContractFormDialog
+          open={showContractDialog}
+          onOpenChange={setShowContractDialog}
+          onSave={handleContractSave}
+        />
       </main>
     </div>
   );

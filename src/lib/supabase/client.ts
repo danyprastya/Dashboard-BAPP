@@ -3,7 +3,9 @@ import { createBrowserClient } from "@supabase/ssr";
 // Supabase client for browser/client components
 export function createClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // Support both key names for flexibility
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+                          process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
     console.warn(
@@ -18,8 +20,7 @@ export function createClient() {
 
 // Check if Supabase is configured
 export function isSupabaseConfigured(): boolean {
-  return !!(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
+  const hasKey = !!(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+                   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY);
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && hasKey);
 }
