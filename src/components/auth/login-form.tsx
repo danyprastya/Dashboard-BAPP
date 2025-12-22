@@ -28,9 +28,13 @@ export function LoginForm() {
   useEffect(() => {
     const errorParam = searchParams.get("error");
     if (errorParam === "unauthorized") {
-      setError("Email Anda tidak terdaftar dalam sistem. Hubungi administrator untuk mendapatkan akses.");
+      setError(
+        "Email Anda tidak terdaftar dalam sistem. Hubungi administrator untuk mendapatkan akses."
+      );
     } else if (errorParam === "unauthenticated") {
-      setError("Silakan login terlebih dahulu untuk mengakses halaman tersebut.");
+      setError(
+        "Silakan login terlebih dahulu untuk mengakses halaman tersebut."
+      );
     }
   }, [searchParams]);
 
@@ -106,11 +110,13 @@ export function LoginForm() {
           </div>
 
           {error && (
-            <div className={`flex items-start gap-2 rounded-lg p-3 text-sm ${
-              searchParams.get("error") === "unauthorized" 
-                ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
-                : "bg-destructive/10 text-destructive"
-            }`}>
+            <div
+              className={`flex items-start gap-2 rounded-lg p-3 text-sm ${
+                searchParams.get("error") === "unauthorized"
+                  ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                  : "bg-destructive/10 text-destructive"
+              }`}
+            >
               {searchParams.get("error") === "unauthorized" ? (
                 <ShieldX className="h-4 w-4 mt-0.5 shrink-0" />
               ) : (

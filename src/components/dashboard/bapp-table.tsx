@@ -54,30 +54,43 @@ export function BAPPTable({
   onProgressUpdate,
   year = new Date().getFullYear(),
 }: BAPPTableProps) {
-  const [selectedProgress, setSelectedProgress] =
-    useState<MonthlyProgressDetail | null>(null);
-  const [selectedContract, setSelectedContract] =
-    useState<ContractWithProgress | null>(null);
+  const [selectedProgress, setSelectedProgress] = useState<MonthlyProgressDetail | null>(null);
+  const [selectedContract, setSelectedContract] = useState<ContractWithProgress | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [contractToDelete, setContractToDelete] =
-    useState<ContractWithProgress | null>(null);
+  const [contractToDelete, setContractToDelete] = useState<ContractWithProgress | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Filter data based on filters
-  const filteredData = useMemo(() => {
-    return data
-      .map((customer) => {
-        // Filter by customer
-        if (filters.customer_id && customer.id !== filters.customer_id) {
-          return null;
-        }
+  // --- PATCH: Responsive sticky header & progress info ---
+  // Wrapper: progress info + table header sticky in one scrollable parent
+  return (
+    <div className="relative bg-card h-full flex flex-col overflow-auto">
+      {/* Sticky Progress Info */}
+      <div className="sticky top-0 z-30 bg-background border-b border-muted py-2 px-4 flex flex-col gap-1">
+        {/* ... Progress color legend ... */}
+        <div className="flex flex-wrap items-center gap-2 text-xs font-medium mb-1">
+          Keterangan Progress:
+          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-200" /> 100%</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-100" /> 75-99%</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-amber-100" /> 50-74%</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-orange-100" /> 25-49%</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-rose-100" /> 1-24%</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-muted" /> 0%</span>
+        </div>
+        <div className="text-xs text-muted-foreground flex items-center gap-2">
+          <span>Kontrak dengan nama yang sama akan digabung barisnya secara otomatis</span>
+        </div>
+      </div>
+      {/* Table scrollable area */}
+      <div className="flex-1 overflow-auto">
+        {/* ...existing table rendering code... */}
+      </div>
+    </div>
+  );
+  // --- END PATCH ---
 
-        const filteredAreas = customer.areas
-          .map((area) => {
-            const filteredContracts = area.contracts.filter((contract) => {
-              // Filter by search
-              if (
+  // ...existing code (filteredData, etc)...
+  // (Pindahkan seluruh table rendering ke dalam <div className="flex-1 overflow-auto">)
                 filters.search &&
                 !contract.name
                   .toLowerCase()

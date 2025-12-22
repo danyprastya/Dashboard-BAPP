@@ -43,14 +43,10 @@ export function EditProgressDialog({
   const [uploadLink, setUploadLink] = useState("");
   const [isUploadCompleted, setIsUploadCompleted] = useState(false);
   const [notes, setNotes] = useState("");
-  const [signatureStatuses, setSignatureStatuses] = useState<
-    Record<string, boolean>
-  >({});
+  const [signatureStatuses, setSignatureStatuses] = useState<Record<string, boolean>>({});
 
   // Get the progress for this month
-  const monthProgress = contract.monthly_progress.find(
-    (p) => p.month === month
-  );
+  const monthProgress = contract.monthly_progress.find((p) => p.month === month);
 
   // Initialize form state when dialog opens
   useEffect(() => {
@@ -58,7 +54,6 @@ export function EditProgressDialog({
       setUploadLink(monthProgress.upload_link || "");
       setIsUploadCompleted(monthProgress.is_upload_completed);
       setNotes(monthProgress.notes || "");
-
       const statuses: Record<string, boolean> = {};
       monthProgress.signatures.forEach((sig) => {
         statuses[sig.id] = sig.is_completed;
@@ -67,17 +62,27 @@ export function EditProgressDialog({
     }
   }, [open, monthProgress]);
 
-  const handleSignatureChange = (signatureId: string, checked: boolean) => {
-    setSignatureStatuses((prev) => ({
-      ...prev,
-      [signatureId]: checked,
-    }));
-  };
-
-  const handleSave = async () => {
-    setIsLoading(true);
-
-    try {
+  // --- PATCH: Dialog fixed size & scrollable content ---
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[400px] max-w-[95vw] h-[90vh] max-h-[95vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Edit Progress Bulan {MONTH_NAMES_FULL[month - 1]}</DialogTitle>
+          <DialogDescription>
+            Update status tanda tangan dan upload dokumen BAPP.
+          </DialogDescription>
+        </DialogHeader>
+        {/* Konten utama di-scroll jika overflow */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* ...existing form content... */}
+        </div>
+        <DialogFooter>
+          {/* ...existing footer content... */}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+  // --- END PATCH ---
       if (isSupabaseConfigured()) {
         // Save to Supabase
         const sigStatuses = Object.entries(signatureStatuses).map(

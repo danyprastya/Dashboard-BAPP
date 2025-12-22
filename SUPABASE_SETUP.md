@@ -5,6 +5,7 @@
 Buka **SQL Editor** di Supabase Dashboard, lalu jalankan isi file `supabase/schema.sql`.
 
 Schema ini akan membuat tabel-tabel berikut:
+
 - `customers` - Data customer
 - `areas` - Area per customer
 - `bapp_contracts` - Kontrak BAPP
@@ -149,6 +150,7 @@ CREATE TRIGGER on_auth_user_created
 ## 4. Cek Constraint Invoice Type
 
 Database memiliki constraint untuk kolom `invoice_type`. Nilai yang valid adalah:
+
 - `Pusat`
 - `Regional 2`
 - `Regional 3`
@@ -165,6 +167,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 Atau gunakan nama alternatif:
+
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your-anon-key
@@ -180,18 +183,22 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your-anon-key
 ## Troubleshooting
 
 ### Error: "new row for relation violates check constraint"
+
 - Pastikan `invoice_type` adalah salah satu dari: `Pusat`, `Regional 2`, `Regional 3`
 - Form sudah diupdate dengan dropdown yang hanya mengizinkan nilai valid
 
 ### Error: "invalid input syntax for type uuid"
+
 - Customer dan Area sekarang diinput sebagai nama (text), bukan UUID
 - Sistem akan otomatis mencari atau membuat customer/area berdasarkan nama
 
 ### Error: "Database error saving new user"
+
 - Jalankan script Auth Trigger di langkah 3
 - Pastikan RLS policy untuk `profiles` sudah benar
 
 ### Data masih placeholder
+
 - Cek environment variables sudah benar
 - Pastikan user sudah login (authenticated)
 - Lihat console browser untuk error detail
@@ -275,12 +282,12 @@ Dashboard ini menggunakan **whitelist email** - hanya user dengan email yang ter
 ```sql
 -- Tambahkan user langsung ke profiles (untuk user yang sudah ada di auth.users)
 INSERT INTO profiles (id, email, full_name, role)
-VALUES 
+VALUES
     ('user-uuid-from-auth', 'user@example.com', 'Nama User', 'admin');
 
 -- Atau untuk multiple users sekaligus
 INSERT INTO profiles (id, email, full_name, role)
-VALUES 
+VALUES
     (gen_random_uuid(), 'admin@company.com', 'Admin User', 'admin'),
     (gen_random_uuid(), 'staff1@company.com', 'Staff 1', 'user'),
     (gen_random_uuid(), 'staff2@company.com', 'Staff 2', 'user');
