@@ -9,7 +9,7 @@ export async function updateSession(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // If Supabase is not configured, allow access in dev mode
+  // If Supabase is not configured, allow access in dev mode (placeholder mode)
   if (!supabaseUrl || !supabaseAnonKey) {
     return supabaseResponse;
   }
@@ -43,6 +43,39 @@ export async function updateSession(request: NextRequest) {
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   );
+
+  // Define protected routes that require authentication + email in database
+  const protectedRoutes = ["/dashboard"];
+  const isProtectedRoute = protectedRoutes.some((route) =>
+    request.nextUrl.pathname.startsWith(route)
+  );
+
+  // Redirect to login if not authenticated and trying to access protected route
+  if (!user && isProtectedRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("error", "unauthenticated");
+    return NextResponse.redirect(url);
+  }
+
+  // If user is authenticated and trying to access protected route, verify email in database
+  if (user && isProtectedRoute) {
+    // Check if user's email exists in the profiles table
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("id, email, role")
+      .eq("email", user.email)
+      .single();
+
+    if (error || !profile) {
+      // Email not found in database - sign out and redirect to login
+      await supabase.auth.signOut();
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.set("error", "unauthorized");
+      return NextResponse.redirect(url);
+    }
+  }
 
   // Redirect to login if not authenticated and not on a public route
   if (!user && !isPublicRoute) {

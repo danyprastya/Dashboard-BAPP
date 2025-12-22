@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Loader2, AlertCircle, Info } from "lucide-react";
+import { Loader2, AlertCircle, Info, ShieldX } from "lucide-react";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
@@ -22,6 +22,17 @@ export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const { signIn, isPlaceholderMode } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check for error params from middleware redirect
+  useEffect(() => {
+    const errorParam = searchParams.get("error");
+    if (errorParam === "unauthorized") {
+      setError("Email Anda tidak terdaftar dalam sistem. Hubungi administrator untuk mendapatkan akses.");
+    } else if (errorParam === "unauthenticated") {
+      setError("Silakan login terlebih dahulu untuk mengakses halaman tersebut.");
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,9 +106,17 @@ export function LoginForm() {
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4" />
-              {error}
+            <div className={`flex items-start gap-2 rounded-lg p-3 text-sm ${
+              searchParams.get("error") === "unauthorized" 
+                ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                : "bg-destructive/10 text-destructive"
+            }`}>
+              {searchParams.get("error") === "unauthorized" ? (
+                <ShieldX className="h-4 w-4 mt-0.5 shrink-0" />
+              ) : (
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              )}
+              <span>{error}</span>
             </div>
           )}
 

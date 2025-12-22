@@ -249,4 +249,52 @@ signature_progress
 ├── signature_id (FK → signatures)
 ├── is_completed (BOOLEAN)
 └── completed_at
+
+profiles
+├── id (UUID, PK, FK → auth.users)
+├── email (VARCHAR, UNIQUE)
+├── full_name (VARCHAR)
+├── role (VARCHAR) ← 'admin' atau 'user'
+├── created_at
+└── updated_at
 ```
+
+## 7. Menambahkan User yang Diizinkan Akses
+
+Dashboard ini menggunakan **whitelist email** - hanya user dengan email yang terdaftar di tabel `profiles` yang bisa mengakses `/dashboard`.
+
+### Cara 1: Via Supabase Dashboard (Recommended)
+
+1. Buka **Supabase Dashboard** → **Authentication** → **Users**
+2. Klik **"Add user"** → **"Create new user"**
+3. Masukkan email dan password
+4. User akan otomatis ditambahkan ke tabel `profiles` via trigger
+
+### Cara 2: Via SQL Editor
+
+```sql
+-- Tambahkan user langsung ke profiles (untuk user yang sudah ada di auth.users)
+INSERT INTO profiles (id, email, full_name, role)
+VALUES 
+    ('user-uuid-from-auth', 'user@example.com', 'Nama User', 'admin');
+
+-- Atau untuk multiple users sekaligus
+INSERT INTO profiles (id, email, full_name, role)
+VALUES 
+    (gen_random_uuid(), 'admin@company.com', 'Admin User', 'admin'),
+    (gen_random_uuid(), 'staff1@company.com', 'Staff 1', 'user'),
+    (gen_random_uuid(), 'staff2@company.com', 'Staff 2', 'user');
+```
+
+### Cara 3: Invite User via Supabase
+
+1. Buka **Authentication** → **Users**
+2. Klik **"Invite user"**
+3. Masukkan email yang ingin diundang
+4. User akan menerima email undangan untuk set password
+
+### Catatan Penting
+
+- **Hanya email yang ada di tabel `profiles` yang bisa akses dashboard**
+- User yang login tapi email-nya tidak ada di `profiles` akan di-redirect ke halaman login dengan pesan error
+- Trigger `handle_new_user` otomatis membuat entry di `profiles` saat user baru mendaftar via Auth
