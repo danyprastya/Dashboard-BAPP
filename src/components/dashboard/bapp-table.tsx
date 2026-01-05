@@ -47,8 +47,11 @@ import {
   CheckCircle2,
   XCircle,
   FileUp,
+  Eye,
 } from "lucide-react";
 import { EditContractDialog } from "./edit-contract-dialog";
+import { FilePreviewDialog } from "./file-preview-dialog";
+import { parseFileUrl } from "@/lib/file-preview";
 
 interface BAPPTableProps {
   data: CustomerWithAreas[];
@@ -83,6 +86,26 @@ export function BAPPTable({
     useState<ContractWithProgress | null>(null);
   const [editCustomerName, setEditCustomerName] = useState("");
   const [editAreaName, setEditAreaName] = useState("");
+  const [progressCustomerName, setProgressCustomerName] = useState("");
+  const [progressAreaName, setProgressAreaName] = useState("");
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewTitle, setPreviewTitle] = useState("");
+  const [previewDescription, setPreviewDescription] = useState("");
+
+  // Handler for opening file preview dialog
+  const handlePreviewClick = (
+    url: string,
+    contractName: string,
+    monthName: string,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    setPreviewUrl(url);
+    setPreviewTitle(`Dokumen - ${monthName}`);
+    setPreviewDescription(contractName);
+    setPreviewDialogOpen(true);
+  };
 
   // Handler for opening edit contract dialog
   const handleEditClick = (
@@ -234,10 +257,14 @@ export function BAPPTable({
   // Handle progress cell click
   const handleProgressClick = (
     progress: MonthlyProgressDetail,
-    contract: ContractWithProgress
+    contract: ContractWithProgress,
+    customerName: string,
+    areaName: string
   ) => {
     setSelectedProgress(progress);
     setSelectedContract(contract);
+    setProgressCustomerName(customerName);
+    setProgressAreaName(areaName);
     setDialogOpen(true);
   };
 
@@ -479,7 +506,7 @@ export function BAPPTable({
                           <TooltipTrigger asChild>
                             <button
                               onClick={() =>
-                                handleProgressClick(progress, row.contract)
+                                handleProgressClick(progress, row.contract, row.customer.name, row.area.name)
                               }
                               className={`flex h-8 w-full items-center justify-center rounded text-xs font-medium transition-all hover:ring-2 hover:ring-primary/50 ${getProgressColorClass(
                                 progress.percentage
@@ -553,16 +580,32 @@ export function BAPPTable({
                                   </>
                                 )}
                                 {progress.upload_link && (
-                                  <a
-                                    href={progress.upload_link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="ml-auto text-blue-500 hover:underline flex items-center gap-1"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <FileUp className="h-3 w-3" />
-                                    Lihat
-                                  </a>
+                                  <>
+                                    {parseFileUrl(progress.upload_link).canEmbed && (
+                                      <button
+                                        onClick={(e) => handlePreviewClick(
+                                          progress.upload_link!,
+                                          row.contract.name,
+                                          `${MONTH_NAMES[progress.month - 1]} ${year}`,
+                                          e
+                                        )}
+                                        className="ml-auto text-blue-500 hover:underline flex items-center gap-1"
+                                      >
+                                        <Eye className="h-3 w-3" />
+                                        Preview
+                                      </button>
+                                    )}
+                                    <a
+                                      href={progress.upload_link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={`${parseFileUrl(progress.upload_link).canEmbed ? '' : 'ml-auto'} text-blue-500 hover:underline flex items-center gap-1`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <FileUp className="h-3 w-3" />
+                                      Buka
+                                    </a>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -685,6 +728,8 @@ export function BAPPTable({
         isAdmin={isAdmin}
         year={year}
         onProgressUpdate={onProgressUpdate}
+        customerName={progressCustomerName}
+        areaName={progressAreaName}
       />
 
       {/* Edit Contract Dialog */}
@@ -722,6 +767,15 @@ export function BAPPTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* File Preview Dialog */}
+      <FilePreviewDialog
+        open={previewDialogOpen}
+        onOpenChange={setPreviewDialogOpen}
+        url={previewUrl}
+        title={previewTitle}
+        description={previewDescription}
+      />
     </TooltipProvider>
   );
 }
