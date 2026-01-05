@@ -123,3 +123,49 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Compact Mode Styles */
+.compact-mode {
+  /* Reduce card padding */
+  & .card {
+    @apply p-3;
+  }
+  
+  /* Reduce table cell padding */
+  & td,
+  & th {
+    @apply py-1.5 px-2;
+  }
+  
+  /* Reduce button padding */
+  & button {
+    @apply py-1;
+  }
+  
+  /* Reduce text sizes slightly */
+  & .text-3xl {
+    @apply text-2xl;
+  }
+  
+  & .text-2xl {
+    @apply text-xl;
+  }
+  
+  /* Reduce spacing */
+  & .space-y-6 {
+    @apply space-y-4;
+  }
+  
+  & .space-y-4 {
+    @apply space-y-2;
+  }
+  
+  & .gap-4 {
+    @apply gap-2;
+  }
+  
+  /* Reduce container padding */
+  & .container {
+    @apply px-2 sm:px-4;
+  }
+}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
+import { useSettings } from "@/components/providers/settings-provider";
 import { DashboardHeader } from "./header";
 import { DashboardFiltersBar } from "./filters";
 import { BAPPTable } from "./bapp-table";
@@ -24,15 +25,19 @@ import {
   Building2,
   Plus,
   Download,
+  RefreshCw,
 } from "lucide-react";
 import { ImportYearDialog } from "./import-year-dialog";
+import { logger } from "@/lib/logger";
 
 export function DashboardContent() {
   const { loading: authLoading, isPlaceholderMode, user } = useAuth();
+  const { settings } = useSettings();
   const [data, setData] = useState<CustomerWithAreas[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showContractDialog, setShowContractDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [filters, setFilters] = useState<DashboardFilters>({
     year: new Date().getFullYear(),
     search: "",
@@ -46,55 +51,63 @@ export function DashboardContent() {
   const isAdmin = !!user;
 
   // Fetch data function
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
+  const loadData = useCallback(
+    async (silent = false) => {
+      if (!silent) setIsLoading(true);
 
-    try {
-      // Simulate loading delay
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      try {
+        // Simulate loading delay
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
-      let fetchedData: CustomerWithAreas[];
+        let fetchedData: CustomerWithAreas[];
 
-      if (isSupabaseConfigured() && !isPlaceholderMode) {
-        // Fetch from Supabase
-        fetchedData = await fetchDashboardData(filters.year);
-      } else {
-        // Use placeholder data
-        fetchedData = generatePlaceholderData(filters.year);
+        if (isSupabaseConfigured() && !isPlaceholderMode) {
+          // Fetch from Supabase
+          fetchedData = await fetchDashboardData(filters.year);
+        } else {
+          // Use placeholder data
+          fetchedData = generatePlaceholderData(filters.year);
+        }
+
+        // Update yearly status
+        const dataWithStatus = fetchedData.map((customer) => ({
+          ...customer,
+          areas: customer.areas.map((area) => ({
+            ...area,
+            contracts: area.contracts.map((contract) => ({
+              ...contract,
+              yearly_status: calculateYearlyStatus(contract),
+            })),
+          })),
+        }));
+
+        setData(dataWithStatus);
+        setLastRefresh(new Date());
+
+        if (silent) {
+          logger.info("Data dashboard diperbarui (auto-refresh)");
+        }
+      } catch (error) {
+        console.error("Error loading data:", error);
+        // Fallback to placeholder on error
+        const placeholderData = generatePlaceholderData(filters.year);
+        const dataWithStatus = placeholderData.map((customer) => ({
+          ...customer,
+          areas: customer.areas.map((area) => ({
+            ...area,
+            contracts: area.contracts.map((contract) => ({
+              ...contract,
+              yearly_status: calculateYearlyStatus(contract),
+            })),
+          })),
+        }));
+        setData(dataWithStatus);
+      } finally {
+        if (!silent) setIsLoading(false);
       }
-
-      // Update yearly status
-      const dataWithStatus = fetchedData.map((customer) => ({
-        ...customer,
-        areas: customer.areas.map((area) => ({
-          ...area,
-          contracts: area.contracts.map((contract) => ({
-            ...contract,
-            yearly_status: calculateYearlyStatus(contract),
-          })),
-        })),
-      }));
-
-      setData(dataWithStatus);
-    } catch (error) {
-      console.error("Error loading data:", error);
-      // Fallback to placeholder on error
-      const placeholderData = generatePlaceholderData(filters.year);
-      const dataWithStatus = placeholderData.map((customer) => ({
-        ...customer,
-        areas: customer.areas.map((area) => ({
-          ...area,
-          contracts: area.contracts.map((contract) => ({
-            ...contract,
-            yearly_status: calculateYearlyStatus(contract),
-          })),
-        })),
-      }));
-      setData(dataWithStatus);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [filters.year, isPlaceholderMode]);
+    },
+    [filters.year, isPlaceholderMode]
+  );
 
   // Fetch data on mount and when year changes
   useEffect(() => {
@@ -102,6 +115,18 @@ export function DashboardContent() {
       loadData();
     }
   }, [authLoading, loadData]);
+
+  // Auto-refresh effect
+  useEffect(() => {
+    if (!settings.autoRefresh || authLoading) return;
+
+    const intervalMs = settings.refreshInterval * 1000;
+    const intervalId = setInterval(() => {
+      loadData(true); // Silent refresh
+    }, intervalMs);
+
+    return () => clearInterval(intervalId);
+  }, [settings.autoRefresh, settings.refreshInterval, authLoading, loadData]);
 
   // Handle progress update (refresh data)
   const handleProgressUpdate = () => {
@@ -176,12 +201,23 @@ export function DashboardContent() {
               <h1 className="text-2xl font-bold tracking-tight">
                 Monitoring Kontrak BAPP
               </h1>
-              <p className="text-muted-foreground">
-                Pantau progress kontrak BAPP untuk semua customer dan daerah
-              </p>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span>
+                  Pantau progress kontrak BAPP untuk semua customer dan daerah
+                </span>
+                {settings.autoRefresh && (
+                  <span className="flex items-center gap-1 text-xs bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full">
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    Auto {settings.refreshInterval}s
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+              <Button
+                variant="outline"
+                onClick={() => setShowImportDialog(true)}
+              >
                 <Download className="mr-2 h-4 w-4" />
                 Import Tahun
               </Button>
@@ -196,35 +232,37 @@ export function DashboardContent() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+                <CardTitle className="text-[1rem] font-medium">
                   Total Customer
                 </CardTitle>
-                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <Building2 className="h-6 w-6 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats.totalCustomers}</div>
+                <div className="text-3xl font-bold">{stats.totalCustomers}</div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+                <CardTitle className="text-[1rem] font-medium">
                   Total Kontrak
                 </CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
+                <FileText className="h-6 w-6 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats.totalContracts}</div>
+                <div className="text-3xl font-bold">{stats.totalContracts}</div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Selesai</CardTitle>
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <CardTitle className="text-[1rem] font-medium">
+                  Selesai
+                </CardTitle>
+                <CheckCircle2 className="h-6 w-6 text-emerald-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-emerald-600">
+                <div className="text-3xl font-bold text-emerald-600">
                   {stats.completed}
                 </div>
               </CardContent>
@@ -232,13 +270,13 @@ export function DashboardContent() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+                <CardTitle className="text-[1rem] font-medium">
                   Dalam Proses
                 </CardTitle>
-                <Clock className="h-4 w-4 text-amber-600" />
+                <Clock className="h-6 w-6 text-amber-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-amber-600">
+                <div className="text-3xl font-bold text-amber-600">
                   {stats.inProgress}
                 </div>
               </CardContent>
@@ -246,13 +284,13 @@ export function DashboardContent() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+                <CardTitle className="text-[1rem] font-medium">
                   Belum Mulai
                 </CardTitle>
-                <AlertCircle className="h-4 w-4 text-neutral-500" />
+                <AlertCircle className="h-6 w-6 text-neutral-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-neutral-500">
+                <div className="text-3xl font-bold text-neutral-500">
                   {stats.notStarted}
                 </div>
               </CardContent>
@@ -283,6 +321,7 @@ export function DashboardContent() {
               isAdmin={isAdmin}
               onProgressUpdate={handleProgressUpdate}
               year={filters.year}
+              showPercentage={settings.showProgressPercentage}
             />
           </div>
         </div>

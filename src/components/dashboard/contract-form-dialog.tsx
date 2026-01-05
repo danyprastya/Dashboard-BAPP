@@ -351,30 +351,6 @@ export function ContractFormDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* Invoice Type - Select Dropdown */}
-            <div className="space-y-2">
-              <Label htmlFor="invoice-type">
-                Jenis Invoice <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={formData.invoice_type}
-                onValueChange={(value: InvoiceType) =>
-                  setFormData({ ...formData, invoice_type: value })
-                }
-              >
-                <SelectTrigger id="invoice-type">
-                  <SelectValue placeholder="Pilih jenis" />
-                </SelectTrigger>
-                <SelectContent>
-                  {INVOICE_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Year - Number Input */}
             <div className="space-y-2">
               <Label htmlFor="year">
@@ -406,7 +382,7 @@ export function ContractFormDialog({
               }
             >
               <SelectTrigger id="period">
-                <SelectValue placeholder="Pilih periode penagihan" />
+                <SelectValue placeholder="Pilih periode kontrak" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Per 1 Bulan">Per 1 Bulan</SelectItem>

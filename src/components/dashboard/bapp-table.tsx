@@ -34,9 +34,21 @@ import type {
   MonthlyProgressDetail,
   ContractWithProgress,
 } from "@/types/database";
-import { MONTH_NAMES, parsePeriodToNumber, getPeriodMonths } from "@/types/database";
-import { Info, Trash2, Loader2, Pencil } from "lucide-react";
-import { EditPeriodDialog } from "./edit-period-dialog";
+import {
+  MONTH_NAMES,
+  parsePeriodToNumber,
+  getPeriodMonths,
+} from "@/types/database";
+import {
+  Info,
+  Trash2,
+  Loader2,
+  Pencil,
+  CheckCircle2,
+  XCircle,
+  FileUp,
+} from "lucide-react";
+import { EditContractDialog } from "./edit-contract-dialog";
 
 interface BAPPTableProps {
   data: CustomerWithAreas[];
@@ -45,6 +57,7 @@ interface BAPPTableProps {
   isAdmin?: boolean;
   onProgressUpdate?: () => void;
   year?: number;
+  showPercentage?: boolean;
 }
 
 export function BAPPTable({
@@ -54,20 +67,33 @@ export function BAPPTable({
   isAdmin = false,
   onProgressUpdate,
   year = new Date().getFullYear(),
+  showPercentage = true,
 }: BAPPTableProps) {
-  const [selectedProgress, setSelectedProgress] = useState<MonthlyProgressDetail | null>(null);
-  const [selectedContract, setSelectedContract] = useState<ContractWithProgress | null>(null);
+  const [selectedProgress, setSelectedProgress] =
+    useState<MonthlyProgressDetail | null>(null);
+  const [selectedContract, setSelectedContract] =
+    useState<ContractWithProgress | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [contractToDelete, setContractToDelete] = useState<ContractWithProgress | null>(null);
+  const [contractToDelete, setContractToDelete] =
+    useState<ContractWithProgress | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [periodDialogOpen, setPeriodDialogOpen] = useState(false);
-  const [contractToEditPeriod, setContractToEditPeriod] = useState<ContractWithProgress | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [contractToEdit, setContractToEdit] =
+    useState<ContractWithProgress | null>(null);
+  const [editCustomerName, setEditCustomerName] = useState("");
+  const [editAreaName, setEditAreaName] = useState("");
 
-  // Handler for opening period edit dialog
-  const handleEditPeriodClick = (contract: ContractWithProgress) => {
-    setContractToEditPeriod(contract);
-    setPeriodDialogOpen(true);
+  // Handler for opening edit contract dialog
+  const handleEditClick = (
+    contract: ContractWithProgress,
+    customerName: string,
+    areaName: string
+  ) => {
+    setContractToEdit(contract);
+    setEditCustomerName(customerName);
+    setEditAreaName(areaName);
+    setEditDialogOpen(true);
   };
 
   // Filter data based on filters
@@ -266,7 +292,9 @@ export function BAPPTable({
         {/* Sticky Legend - di dalam container scroll */}
         <div className="sticky top-0 z-30 bg-background border-b">
           <div className="flex flex-wrap items-center gap-4 text-sm px-4 py-3 bg-muted/50">
-            <span className="text-muted-foreground font-medium">Keterangan:</span>
+            <span className="text-muted-foreground font-medium">
+              Keterangan:
+            </span>
             <div className="flex items-center gap-1">
               <div className="h-3 w-3 rounded bg-emerald-100 dark:bg-emerald-950" />
               <span className="text-xs">100%</span>
@@ -297,7 +325,7 @@ export function BAPPTable({
             </div>
           </div>
         </div>
-        
+
         <table className="w-full border-collapse text-sm">
           <thead className="sticky top-10 z-20 shadow-sm">
             <tr className="border-b bg-muted">
@@ -383,28 +411,9 @@ export function BAPPTable({
 
                 {/* Period */}
                 <td className="border-r px-3 py-2 text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <span className="text-muted-foreground">
-                      {row.contract.period}
-                    </span>
-                    {isAdmin && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-muted-foreground hover:text-primary"
-                            onClick={() => handleEditPeriodClick(row.contract)}
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Edit periode</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                  </div>
+                  <span className="text-muted-foreground">
+                    {row.contract.period}
+                  </span>
                 </td>
 
                 {/* Monthly progress cells with merged cell support */}
@@ -476,25 +485,31 @@ export function BAPPTable({
                                 progress.percentage
                               )}`}
                             >
-                              {progress.percentage}%
+                              {showPercentage
+                                ? `${progress.percentage}%`
+                                : progress.percentage === 100
+                                ? "✓"
+                                : progress.percentage > 0
+                                ? "○"
+                                : ""}
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent className="max-w-xs">
+                          <TooltipContent className="max-w-sm">
                             {/* Progress & Status */}
-                            <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center justify-between gap-4 text-sm">
                               <p className="font-medium">
-                                {progress.completed_items}/{progress.total_items}{" "}
-                                item selesai
+                                {progress.completed_items}/
+                                {progress.total_items} item selesai
                               </p>
                               <Badge
                                 variant={
                                   status === "Selesai"
-                                    ? "default"
+                                    ? "outline"
                                     : status === "Proses"
-                                    ? "secondary"
+                                    ? "outline"
                                     : "outline"
                                 }
-                                className="text-xs"
+                                className="text-xs text-white"
                               >
                                 {status}
                               </Badge>
@@ -503,12 +518,12 @@ export function BAPPTable({
                             {/* Notes with timestamp */}
                             {progress.notes && (
                               <div className="mt-2 border-t pt-2">
-                                <p className="text-xs font-medium text-muted-foreground">
+                                <p className="text-xs font-medium text-slate">
                                   Catatan:
                                 </p>
                                 <p className="text-sm">{progress.notes}</p>
                                 {progress.notes_updated_at && (
-                                  <p className="mt-1 text-xs text-muted-foreground">
+                                  <p className="mt-1 text-xs text-slate">
                                     Diupdate:{" "}
                                     {formatTimestamp(progress.notes_updated_at)}
                                   </p>
@@ -516,42 +531,88 @@ export function BAPPTable({
                               </div>
                             )}
 
-                            {/* Completed signatures */}
-                            {completedSignatures.length > 0 && (
-                              <div className="mt-2 border-t pt-2">
-                                <p className="text-xs font-medium text-muted-foreground">
-                                  Tanda Tangan Selesai:
-                                </p>
-                                <ul className="mt-1 space-y-1">
-                                  {completedSignatures.map((sig) => (
-                                    <li
-                                      key={sig.id || sig.name}
-                                      className="text-xs"
-                                    >
-                                      <span className="font-medium">
-                                        {sig.name}
-                                      </span>
-                                      {sig.completed_at && (
-                                        <span className="text-muted-foreground">
-                                          {" "}
-                                          - {formatTimestamp(sig.completed_at)}
-                                        </span>
-                                      )}
-                                    </li>
-                                  ))}
-                                </ul>
+                            {/* Upload Document Status */}
+                            <div className="mt-2 border-t pt-2">
+                              <p className="text-sm font-medium text-slate mb-1">
+                                Status Upload Dokumen:
+                              </p>
+                              <div className="flex items-center gap-2 text-xs">
+                                {progress.is_upload_completed ? (
+                                  <>
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                      Sudah diupload
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle className="h-4 w-4 text-red-500" />
+                                    <span className="text-slate">
+                                      Belum diupload
+                                    </span>
+                                  </>
+                                )}
+                                {progress.upload_link && (
+                                  <a
+                                    href={progress.upload_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="ml-auto text-blue-500 hover:underline flex items-center gap-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <FileUp className="h-3 w-3" />
+                                    Lihat
+                                  </a>
+                                )}
                               </div>
-                            )}
+                            </div>
+
+                            {/* Signatures Status */}
+                            <div className="my-2 border-y py-2">
+                              <p className="text-sm font-medium text-slate mb-1">
+                                Status Tanda Tangan (
+                                {completedSignatures.length}/
+                                {progress.signatures.length}):
+                              </p>
+                              <ul className="space-y-1">
+                                {progress.signatures.map((sig) => (
+                                  <li
+                                    key={sig.id || sig.name}
+                                    className="text-xs flex items-center gap-2"
+                                  >
+                                    {sig.is_completed ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                    ) : (
+                                      <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                                    )}
+                                    <span
+                                      className={
+                                        sig.is_completed
+                                          ? "font-medium"
+                                          : "text-slate"
+                                      }
+                                    >
+                                      {sig.name}
+                                    </span>
+                                    {sig.is_completed && sig.completed_at && (
+                                      <span className="text-slate text-xs ml-auto">
+                                        {formatTimestamp(sig.completed_at)}
+                                      </span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
 
                             {/* Last updated */}
                             {progress.updated_at && (
-                              <p className="mt-2 text-xs text-muted-foreground">
+                              <p className="mt-2 text-xs text-slate">
                                 Update terakhir:{" "}
                                 {formatTimestamp(progress.updated_at)}
                               </p>
                             )}
 
-                            <p className="mt-1 text-xs text-muted-foreground">
+                            <p className="mt-1 text-xs text-muted-foreground text-center">
                               Klik untuk detail
                             </p>
                           </TooltipContent>
@@ -565,24 +626,47 @@ export function BAPPTable({
                   return cells;
                 })()}
 
-                {/* Delete Action */}
+                {/* Actions */}
                 {isAdmin && (
-                  <td className="px-3 py-2 text-center">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeleteClick(row.contract)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Hapus kontrak</p>
-                      </TooltipContent>
-                    </Tooltip>
+                  <td className="px-2 py-2 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            onClick={() =>
+                              handleEditClick(
+                                row.contract,
+                                row.customer.name,
+                                row.area.name
+                              )
+                            }
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Edit kontrak</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeleteClick(row.contract)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Hapus kontrak</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   </td>
                 )}
               </tr>
@@ -603,12 +687,14 @@ export function BAPPTable({
         onProgressUpdate={onProgressUpdate}
       />
 
-      {/* Edit Period Dialog */}
-      <EditPeriodDialog
-        open={periodDialogOpen}
-        onOpenChange={setPeriodDialogOpen}
-        contract={contractToEditPeriod}
-        onPeriodUpdate={onProgressUpdate}
+      {/* Edit Contract Dialog */}
+      <EditContractDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        contract={contractToEdit}
+        customerName={editCustomerName}
+        areaName={editAreaName}
+        onSave={() => onProgressUpdate?.()}
       />
 
       {/* Delete Confirmation Dialog */}

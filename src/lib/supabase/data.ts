@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { logger } from "@/lib/logger";
 import type {
   Customer,
   Area,
@@ -513,6 +514,7 @@ export async function createContract(
 
   if (contractError) {
     console.error("Error creating contract:", contractError);
+    logger.error("Gagal membuat kontrak", contractError.message);
     throw new Error(contractError.message);
   }
 
@@ -531,12 +533,14 @@ export async function createContract(
 
     if (sigError) {
       console.error("Error creating signatures:", sigError);
+      logger.error("Gagal membuat tanda tangan", sigError.message);
       // Rollback contract creation
       await supabase.from("bapp_contracts").delete().eq("id", contract.id);
       throw new Error(sigError.message);
     }
   }
 
+  logger.success(`Kontrak "${contractData.name}" berhasil dibuat`, `ID: ${contract.id}`);
   return contract;
 }
 
@@ -564,34 +568,91 @@ export async function updateContract(
 
 export async function updateContractSignatures(
   contractId: string,
-  signatures: { name: string; role: string }[]
+  signatures: { id?: string; name: string; role: string }[]
 ): Promise<void> {
   const supabase = createClient();
   if (!supabase) return;
 
-  // Delete existing signatures
-  const { error: deleteError } = await supabase
+  // Get existing signatures for this contract
+  const { data: existingSignatures, error: fetchError } = await supabase
     .from("signatures")
-    .delete()
-    .eq("contract_id", contractId);
+    .select("id, name, role, order")
+    .eq("contract_id", contractId)
+    .order("order");
 
-  if (deleteError) {
-    console.error("Error deleting signatures:", deleteError);
-    throw new Error(deleteError.message);
+  if (fetchError) {
+    console.error("Error fetching existing signatures:", fetchError);
+    throw new Error(fetchError.message);
+  }
+
+  const existingIds = new Set((existingSignatures || []).map((s) => s.id));
+  const newSignatureIds = new Set(signatures.filter((s) => s.id && !s.id.startsWith("sig-new-")).map((s) => s.id));
+
+  // Signatures to delete (exist in DB but not in new list)
+  const toDelete = (existingSignatures || []).filter((s) => !newSignatureIds.has(s.id));
+  
+  // Signatures to update (exist in both, check if changed)
+  const toUpdate: { id: string; name: string; role: string; order: number }[] = [];
+  
+  // Signatures to create (new ones without valid existing ID)
+  const toCreate: { contract_id: string; name: string; role: string; order: number }[] = [];
+
+  signatures.forEach((sig, index) => {
+    const order = index + 1;
+    
+    if (sig.id && existingIds.has(sig.id)) {
+      // Existing signature - check if needs update
+      const existing = existingSignatures?.find((e) => e.id === sig.id);
+      if (existing && (existing.name !== sig.name || existing.role !== sig.role || existing.order !== order)) {
+        toUpdate.push({
+          id: sig.id,
+          name: sig.name,
+          role: sig.role,
+          order,
+        });
+      }
+    } else {
+      // New signature
+      toCreate.push({
+        contract_id: contractId,
+        name: sig.name,
+        role: sig.role,
+        order,
+      });
+    }
+  });
+
+  // Delete removed signatures (this will cascade delete signature_progress due to FK)
+  if (toDelete.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("signatures")
+      .delete()
+      .in("id", toDelete.map((s) => s.id));
+
+    if (deleteError) {
+      console.error("Error deleting signatures:", deleteError);
+      throw new Error(deleteError.message);
+    }
+  }
+
+  // Update existing signatures (preserves signature_progress!)
+  for (const sig of toUpdate) {
+    const { error: updateError } = await supabase
+      .from("signatures")
+      .update({ name: sig.name, role: sig.role, order: sig.order })
+      .eq("id", sig.id);
+
+    if (updateError) {
+      console.error("Error updating signature:", updateError);
+      throw new Error(updateError.message);
+    }
   }
 
   // Create new signatures
-  if (signatures.length > 0) {
-    const signaturesData = signatures.map((sig, index) => ({
-      contract_id: contractId,
-      name: sig.name,
-      role: sig.role,
-      order: index + 1,
-    }));
-
+  if (toCreate.length > 0) {
     const { error: insertError } = await supabase
       .from("signatures")
-      .insert(signaturesData);
+      .insert(toCreate);
 
     if (insertError) {
       console.error("Error creating signatures:", insertError);
@@ -694,6 +755,9 @@ export async function updateMonthlyProgress(
       });
     }
   }
+  
+  const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+  logger.info(`Progress ${monthNames[month - 1]} ${year} diperbarui`, `Contract ID: ${contractId}`);
 }
 
 // ===================
@@ -1122,6 +1186,19 @@ export async function importContractsFromYear(
     }
   }
 
+  if (result.success > 0) {
+    logger.success(
+      `Import kontrak berhasil`,
+      `${result.success} kontrak diimport dari ${sourceYear} ke ${targetYear}`
+    );
+  }
+  if (result.failed > 0) {
+    logger.warning(
+      `Sebagian import gagal`,
+      `${result.failed} kontrak gagal diimport`
+    );
+  }
+
   return result;
 }
 
@@ -1140,8 +1217,11 @@ export async function deleteContract(contractId: string): Promise<void> {
 
   if (error) {
     console.error("Error deleting contract:", error);
+    logger.error("Gagal menghapus kontrak", error.message);
     throw new Error(error.message);
   }
+  
+  logger.success("Kontrak berhasil dihapus", `ID: ${contractId}`);
 }
 
 export async function deleteCustomer(customerId: string): Promise<void> {

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { logger } from "@/lib/logger";
 import type { User } from "@supabase/supabase-js";
 
 interface AuthContextType {
@@ -67,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         aud: "authenticated",
         created_at: new Date().toISOString(),
       } as User);
+      logger.info("Login berhasil (Demo Mode)", email);
       return { error: null };
     }
 
@@ -74,6 +76,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       password,
     });
+
+    if (error) {
+      logger.error("Login gagal", error.message);
+    } else {
+      logger.success("Login berhasil", email);
+    }
 
     return { error: error as Error | null };
   };
@@ -83,11 +91,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!supabase) {
       setUser(null);
+      logger.info("Logout berhasil (Demo Mode)");
       return;
     }
 
     await supabase.auth.signOut();
     setUser(null);
+    logger.info("Logout berhasil");
   };
 
   return (

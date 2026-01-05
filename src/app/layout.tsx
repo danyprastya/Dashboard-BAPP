@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { SettingsProvider } from "@/components/providers/settings-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { MobileNotice } from "@/components/ui/mobile-notice";
 import "./globals.css";
@@ -30,7 +31,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased pb-12`}
       >
-        <AuthProvider>{children}</AuthProvider>
+        <SettingsProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </SettingsProvider>
         <Toaster richColors position="top-right" />
         <MobileNotice />
       </body>

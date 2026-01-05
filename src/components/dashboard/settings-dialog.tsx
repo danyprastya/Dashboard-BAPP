@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -26,12 +27,21 @@ import {
   Sun,
   Monitor,
   Bell,
+  BellOff,
   Palette,
   Database,
   RefreshCw,
   Trash2,
+  Minimize2,
+  Percent,
+  Clock,
+  FileText,
+  Info,
 } from "lucide-react";
+import { useSettings } from "@/components/providers/settings-provider";
 import { showSuccessToast, showInfoToast } from "@/lib/toast";
+import { clearLogs, getLogs } from "@/lib/logger";
+import type { AppSettings } from "@/lib/settings";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -39,100 +49,52 @@ interface SettingsDialogProps {
   onOpenLogViewer: () => void;
 }
 
-interface AppSettings {
-  theme: "light" | "dark" | "system";
-  compactMode: boolean;
-  showNotifications: boolean;
-  autoRefresh: boolean;
-  refreshInterval: number;
-  showProgressPercentage: boolean;
-}
-
-const DEFAULT_SETTINGS: AppSettings = {
-  theme: "system",
-  compactMode: false,
-  showNotifications: true,
-  autoRefresh: false,
-  refreshInterval: 30,
-  showProgressPercentage: true,
-};
-
-const SETTINGS_STORAGE_KEY = "bapp_dashboard_settings";
-
-function getSettings(): AppSettings {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
-
-  try {
-    const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    return stored
-      ? { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
-      : DEFAULT_SETTINGS;
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
-
-function saveSettings(settings: AppSettings): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-}
-
 export function SettingsDialog({
   open,
   onOpenChange,
   onOpenLogViewer,
 }: SettingsDialogProps) {
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const { settings, updateSettings, resetSettings, isLoaded } = useSettings();
+  const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [hasChanges, setHasChanges] = useState(false);
+  const [logCount, setLogCount] = useState(0);
 
-  // Handle dialog open/close - load settings when opening
-  const handleOpenChange = useCallback(
-    (isOpen: boolean) => {
-      if (isOpen) {
-        setSettings(getSettings());
-        setHasChanges(false);
-      }
-      onOpenChange(isOpen);
-    },
-    [onOpenChange]
-  );
+  // Sync local settings when dialog opens or settings change
+  useEffect(() => {
+    if (open && isLoaded) {
+      setLocalSettings(settings);
+      setHasChanges(false);
+      setLogCount(getLogs().length);
+    }
+  }, [open, isLoaded, settings]);
 
-  const updateSetting = <K extends keyof AppSettings>(
+  const updateLocalSetting = <K extends keyof AppSettings>(
     key: K,
     value: AppSettings[K]
   ) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
+    setLocalSettings((prev) => ({ ...prev, [key]: value }));
     setHasChanges(true);
   };
 
   const handleSave = () => {
-    saveSettings(settings);
+    updateSettings(localSettings);
     setHasChanges(false);
-
-    // Apply theme
-    applyTheme(settings.theme);
-
-    showSuccessToast("Pengaturan berhasil disimpan");
+    showSuccessToast("Pengaturan berhasil disimpan", { force: true });
   };
 
   const handleReset = () => {
-    setSettings(DEFAULT_SETTINGS);
-    setHasChanges(true);
-    showInfoToast("Pengaturan dikembalikan ke default");
-  };
-
-  const applyTheme = (theme: "light" | "dark" | "system") => {
-    const root = document.documentElement;
-
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light";
-      root.classList.toggle("dark", systemTheme === "dark");
-    } else {
-      root.classList.toggle("dark", theme === "dark");
-    }
+    const defaultSettings: AppSettings = {
+      theme: "system",
+      compactMode: false,
+      showNotifications: true,
+      autoRefresh: false,
+      refreshInterval: 30,
+      showProgressPercentage: true,
+    };
+    resetSettings();
+    setLocalSettings(defaultSettings);
+    setHasChanges(false);
+    showInfoToast("Pengaturan dikembalikan ke default", { force: true });
   };
 
   const clearAllData = () => {
@@ -141,10 +103,10 @@ export function SettingsDialog({
         "Apakah Anda yakin ingin menghapus semua data lokal? Ini termasuk log dan pengaturan."
       )
     ) {
-      localStorage.removeItem(SETTINGS_STORAGE_KEY);
-      localStorage.removeItem("bapp_dashboard_logs");
-      setSettings(DEFAULT_SETTINGS);
-      showSuccessToast("Data lokal berhasil dihapus");
+      clearLogs();
+      handleReset();
+      setLogCount(0);
+      showSuccessToast("Data lokal berhasil dihapus", { force: true });
     }
   };
 
@@ -154,20 +116,27 @@ export function SettingsDialog({
     system: <Monitor className="h-4 w-4" />,
   };
 
+  const themeLabel = {
+    light: "Terang",
+    dark: "Gelap",
+    system: "Sistem",
+  };
+
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
             Pengaturan
           </DialogTitle>
           <DialogDescription>
-            Konfigurasi tampilan dan preferensi aplikasi
+            Konfigurasi tampilan dan preferensi aplikasi. Semua pengaturan
+            disimpan di browser Anda.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 py-4 overflow-y-auto flex-1">
           {/* Theme Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -175,45 +144,88 @@ export function SettingsDialog({
               Tampilan
             </div>
 
-            <div className="space-y-3 pl-6">
+            <div className="space-y-4 pl-6">
+              {/* Theme Selector */}
               <div className="flex items-center justify-between">
                 <Label htmlFor="theme" className="flex items-center gap-2">
-                  {themeIcon[settings.theme]}
-                  Tema
+                  {themeIcon[localSettings.theme]}
+                  <span>Tema</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {themeLabel[localSettings.theme]}
+                  </Badge>
                 </Label>
                 <Select
-                  value={settings.theme}
+                  value={localSettings.theme}
                   onValueChange={(v) =>
-                    updateSetting("theme", v as AppSettings["theme"])
+                    updateLocalSetting("theme", v as AppSettings["theme"])
                   }
                 >
                   <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="light">Terang</SelectItem>
-                    <SelectItem value="dark">Gelap</SelectItem>
-                    <SelectItem value="system">Sistem</SelectItem>
+                    <SelectItem value="light">
+                      <div className="flex items-center gap-2">
+                        <Sun className="h-4 w-4" />
+                        Terang
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="dark">
+                      <div className="flex items-center gap-2">
+                        <Moon className="h-4 w-4" />
+                        Gelap
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="system">
+                      <div className="flex items-center gap-2">
+                        <Monitor className="h-4 w-4" />
+                        Sistem
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
+              {/* Compact Mode */}
               <div className="flex items-center justify-between">
-                <Label htmlFor="compact-mode">Mode Kompak</Label>
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="compact-mode"
+                    className="flex items-center gap-2"
+                  >
+                    <Minimize2 className="h-4 w-4" />
+                    Mode Kompak
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Kurangi padding dan spacing untuk tampilan lebih padat
+                  </p>
+                </div>
                 <Switch
                   id="compact-mode"
-                  checked={settings.compactMode}
-                  onCheckedChange={(v) => updateSetting("compactMode", v)}
+                  checked={localSettings.compactMode}
+                  onCheckedChange={(v) => updateLocalSetting("compactMode", v)}
                 />
               </div>
 
+              {/* Show Percentage */}
               <div className="flex items-center justify-between">
-                <Label htmlFor="show-percentage">Tampilkan Persentase</Label>
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="show-percentage"
+                    className="flex items-center gap-2"
+                  >
+                    <Percent className="h-4 w-4" />
+                    Tampilkan Persentase
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Tampilkan angka persentase di progress bar
+                  </p>
+                </div>
                 <Switch
                   id="show-percentage"
-                  checked={settings.showProgressPercentage}
+                  checked={localSettings.showProgressPercentage}
                   onCheckedChange={(v) =>
-                    updateSetting("showProgressPercentage", v)
+                    updateLocalSetting("showProgressPercentage", v)
                   }
                 />
               </div>
@@ -229,13 +241,31 @@ export function SettingsDialog({
               Notifikasi
             </div>
 
-            <div className="space-y-3 pl-6">
+            <div className="space-y-4 pl-6">
               <div className="flex items-center justify-between">
-                <Label htmlFor="notifications">Aktifkan Notifikasi</Label>
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="notifications"
+                    className="flex items-center gap-2"
+                  >
+                    {localSettings.showNotifications ? (
+                      <Bell className="h-4 w-4 text-emerald-500" />
+                    ) : (
+                      <BellOff className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    Aktifkan Notifikasi
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Tampilkan toast untuk sukses, info, dan warning. Error
+                    selalu ditampilkan.
+                  </p>
+                </div>
                 <Switch
                   id="notifications"
-                  checked={settings.showNotifications}
-                  onCheckedChange={(v) => updateSetting("showNotifications", v)}
+                  checked={localSettings.showNotifications}
+                  onCheckedChange={(v) =>
+                    updateLocalSetting("showNotifications", v)
+                  }
                 />
               </div>
             </div>
@@ -250,33 +280,47 @@ export function SettingsDialog({
               Refresh Otomatis
             </div>
 
-            <div className="space-y-3 pl-6">
+            <div className="space-y-4 pl-6">
               <div className="flex items-center justify-between">
-                <Label htmlFor="auto-refresh">Aktifkan Auto Refresh</Label>
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="auto-refresh"
+                    className="flex items-center gap-2"
+                  >
+                    <Clock className="h-4 w-4" />
+                    Aktifkan Auto Refresh
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Data dashboard akan diperbarui secara otomatis
+                  </p>
+                </div>
                 <Switch
                   id="auto-refresh"
-                  checked={settings.autoRefresh}
-                  onCheckedChange={(v) => updateSetting("autoRefresh", v)}
+                  checked={localSettings.autoRefresh}
+                  onCheckedChange={(v) => updateLocalSetting("autoRefresh", v)}
                 />
               </div>
 
-              {settings.autoRefresh && (
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="refresh-interval">Interval (detik)</Label>
+              {localSettings.autoRefresh && (
+                <div className="flex items-center justify-between rounded-lg bg-muted p-3">
+                  <Label htmlFor="refresh-interval" className="text-sm">
+                    Interval Refresh
+                  </Label>
                   <Select
-                    value={settings.refreshInterval.toString()}
+                    value={localSettings.refreshInterval.toString()}
                     onValueChange={(v) =>
-                      updateSetting("refreshInterval", parseInt(v))
+                      updateLocalSetting("refreshInterval", parseInt(v))
                     }
                   >
-                    <SelectTrigger className="w-24">
+                    <SelectTrigger className="w-32">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="15">15</SelectItem>
-                      <SelectItem value="30">30</SelectItem>
-                      <SelectItem value="60">60</SelectItem>
-                      <SelectItem value="120">120</SelectItem>
+                      <SelectItem value="15">15 detik</SelectItem>
+                      <SelectItem value="30">30 detik</SelectItem>
+                      <SelectItem value="60">1 menit</SelectItem>
+                      <SelectItem value="120">2 menit</SelectItem>
+                      <SelectItem value="300">5 menit</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -286,7 +330,7 @@ export function SettingsDialog({
 
           <Separator />
 
-          {/* Data Section */}
+          {/* Data & Log Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <Database className="h-4 w-4" />
@@ -294,6 +338,15 @@ export function SettingsDialog({
             </div>
 
             <div className="space-y-3 pl-6">
+              {/* Log Info */}
+              <div className="flex items-center justify-between rounded-lg bg-muted p-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Log Aktivitas</span>
+                </div>
+                <Badge variant="secondary">{logCount} entri</Badge>
+              </div>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -303,7 +356,7 @@ export function SettingsDialog({
                   setTimeout(onOpenLogViewer, 100);
                 }}
               >
-                <Database className="mr-2 h-4 w-4" />
+                <FileText className="mr-2 h-4 w-4" />
                 Lihat Log Aktivitas
               </Button>
 
@@ -316,16 +369,26 @@ export function SettingsDialog({
                 <Trash2 className="mr-2 h-4 w-4" />
                 Hapus Semua Data Lokal
               </Button>
+
+              {/* Info */}
+              <div className="flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-950 p-3 text-xs text-blue-700 dark:text-blue-300">
+                <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                <p>
+                  Semua pengaturan dan log disimpan di browser lokal Anda. Data
+                  ini tidak dikirim ke server dan akan hilang jika Anda
+                  menghapus data browser.
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={handleReset}>
+        <DialogFooter className="gap-2 shrink-0 border-t pt-4">
+          <Button variant="ghost" onClick={handleReset} size="sm">
             Reset ke Default
           </Button>
-          <Button onClick={handleSave} disabled={!hasChanges}>
-            Simpan
+          <Button onClick={handleSave} disabled={!hasChanges} size="sm">
+            Simpan Perubahan
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -20,6 +20,10 @@ import {
   PenTool,
   Pencil,
   StickyNote,
+  AlertCircle,
+  CheckCircle,
+  UserCheck,
+  FileCheckCorner,
 } from "lucide-react";
 import type {
   MonthlyProgressDetail,
@@ -156,9 +160,9 @@ export function ProgressDialog({
                       </div>
                     </div>
                     {signature.is_completed ? (
-                      <Check className="h-4 w-4 text-emerald-600" />
+                      <UserCheck className="h-4 w-4 text-emerald-600" />
                     ) : (
-                      <X className="h-4 w-4 text-neutral-400" />
+                      <AlertCircle className="h-4 w-4 text-red-600" />
                     )}
                   </div>
                 ))}
@@ -192,7 +196,7 @@ export function ProgressDialog({
                 </div>
                 {progress.is_upload_completed ? (
                   <div className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-emerald-600" />
+                    <FileCheckCorner className="h-4 w-4 text-emerald-600" />
                     {progress.upload_link && (
                       <a
                         href={progress.upload_link}
@@ -205,7 +209,7 @@ export function ProgressDialog({
                     )}
                   </div>
                 ) : (
-                  <X className="h-4 w-4 text-neutral-400" />
+                  <AlertCircle className="h-4 w-4 text-red-600" />
                 )}
               </div>
             </div>

@@ -1,10 +1,20 @@
 import { toast } from "sonner";
 import { translateError, formatErrorForDisplay } from "@/lib/error-translator";
 import { logger } from "@/lib/logger";
+import { areNotificationsEnabled } from "@/lib/settings";
 
 interface ToastOptions {
   description?: string;
   duration?: number;
+  force?: boolean; // Show even if notifications are disabled
+}
+
+/**
+ * Check if toast should be shown based on settings
+ */
+function shouldShowToast(force?: boolean): boolean {
+  if (force) return true;
+  return areNotificationsEnabled();
 }
 
 /**
@@ -12,6 +22,9 @@ interface ToastOptions {
  */
 export function showSuccessToast(message: string, options?: ToastOptions) {
   logger.success(message, options?.description);
+  
+  if (!shouldShowToast(options?.force)) return;
+  
   toast.success(message, {
     description: options?.description,
     duration: options?.duration || 4000,
@@ -21,6 +34,7 @@ export function showSuccessToast(message: string, options?: ToastOptions) {
 
 /**
  * Show an error toast with translated error message
+ * Errors are always shown regardless of notification settings
  */
 export function showErrorToast(error: unknown, context?: string) {
   const translated = translateError(error);
@@ -32,6 +46,7 @@ export function showErrorToast(error: unknown, context?: string) {
     translated.code
   );
 
+  // Errors are always shown (force: true equivalent)
   toast.error(context || "Terjadi Kesalahan", {
     description: displayMessage,
     duration: 6000,
@@ -44,6 +59,9 @@ export function showErrorToast(error: unknown, context?: string) {
  */
 export function showWarningToast(message: string, options?: ToastOptions) {
   logger.warning(message, options?.description);
+  
+  if (!shouldShowToast(options?.force)) return;
+  
   toast.warning(message, {
     description: options?.description,
     duration: options?.duration || 5000,
@@ -56,6 +74,9 @@ export function showWarningToast(message: string, options?: ToastOptions) {
  */
 export function showInfoToast(message: string, options?: ToastOptions) {
   logger.info(message, options?.description);
+  
+  if (!shouldShowToast(options?.force)) return;
+  
   toast.info(message, {
     description: options?.description,
     duration: options?.duration || 4000,
