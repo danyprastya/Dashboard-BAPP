@@ -43,6 +43,8 @@ function generateMonthlyProgress(
     is_upload_completed: isUploadCompleted,
     upload_link: isUploadCompleted ? "https://example.com/upload" : null,
     notes: null, // No notes in placeholder data
+    notes_updated_at: null,
+    updated_at: isPastMonth || isCurrentMonth ? new Date().toISOString() : null,
     percentage,
     total_items: totalItems,
     completed_items: completedItems,

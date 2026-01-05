@@ -47,6 +47,7 @@ export interface MonthlyProgress {
   upload_link: string | null;
   is_upload_completed: boolean;
   notes: string | null; // Catatan untuk bulan ini
+  notes_updated_at: string | null; // Timestamp catatan diupdate
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +79,8 @@ export interface MonthlyProgressDetail {
   is_upload_completed: boolean;
   upload_link: string | null;
   notes: string | null; // Catatan untuk bulan ini
+  notes_updated_at: string | null; // Timestamp catatan diupdate
+  updated_at: string | null; // Timestamp progress diupdate
   percentage: number;
   total_items: number; // total signatures + 1 (upload)
   completed_items: number;
@@ -151,6 +154,33 @@ export const MONTH_NAMES_FULL = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember"
 ] as const;
 
+// Period options for contracts
+export const PERIOD_OPTIONS = [
+  { value: 1, label: "Per 1 Bulan" },
+  { value: 2, label: "Per 2 Bulan" },
+  { value: 3, label: "Per 3 Bulan" },
+  { value: 4, label: "Per 4 Bulan" },
+  { value: 6, label: "Per 6 Bulan" },
+  { value: 12, label: "Per 12 Bulan" },
+] as const;
+
+export type PeriodValue = typeof PERIOD_OPTIONS[number]["value"];
+
+// Helper function to get period months (which months are active for a period)
+export function getPeriodMonths(periodValue: number): number[] {
+  const months: number[] = [];
+  for (let i = periodValue; i <= 12; i += periodValue) {
+    months.push(i);
+  }
+  return months;
+}
+
+// Helper function to parse period string to number
+export function parsePeriodToNumber(period: string): number {
+  const match = period.match(/\d+/);
+  return match ? parseInt(match[0]) : 1;
+}
+
 // Helper function to calculate percentage dynamically
 export function calculateProgress(
   completedSignatures: number,
@@ -161,4 +191,16 @@ export function calculateProgress(
   const completedItems = completedSignatures + (isUploadCompleted ? 1 : 0);
   const percentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
   return { percentage, totalItems, completedItems };
+}
+
+// Contract summary for import functionality
+export interface ContractSummary {
+  id: string;
+  customerName: string;
+  areaName: string | null;
+  name: string; // Contract name/package name
+  invoiceType: string;
+  period: string;
+  signatureCount: number;
+  year: number;
 }

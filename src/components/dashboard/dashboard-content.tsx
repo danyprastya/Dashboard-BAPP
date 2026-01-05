@@ -23,13 +23,16 @@ import {
   AlertCircle,
   Building2,
   Plus,
+  Download,
 } from "lucide-react";
+import { ImportYearDialog } from "./import-year-dialog";
 
 export function DashboardContent() {
   const { loading: authLoading, isPlaceholderMode, user } = useAuth();
   const [data, setData] = useState<CustomerWithAreas[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showContractDialog, setShowContractDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [filters, setFilters] = useState<DashboardFilters>({
     year: new Date().getFullYear(),
     search: "",
@@ -177,10 +180,16 @@ export function DashboardContent() {
                 Pantau progress kontrak BAPP untuk semua customer dan daerah
               </p>
             </div>
-            <Button onClick={() => setShowContractDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Tambah Kontrak
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+                <Download className="mr-2 h-4 w-4" />
+                Import Tahun
+              </Button>
+              <Button onClick={() => setShowContractDialog(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Tambah Kontrak
+              </Button>
+            </div>
           </div>
 
           {/* Statistics Cards */}
@@ -283,6 +292,14 @@ export function DashboardContent() {
           open={showContractDialog}
           onOpenChange={setShowContractDialog}
           onSave={handleContractSave}
+        />
+
+        {/* Import Year Dialog */}
+        <ImportYearDialog
+          open={showImportDialog}
+          onOpenChange={setShowImportDialog}
+          currentYear={filters.year}
+          onImportComplete={loadData}
         />
       </main>
     </div>

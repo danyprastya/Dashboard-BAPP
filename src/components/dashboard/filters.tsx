@@ -27,7 +27,8 @@ export function DashboardFiltersBar({
   customers,
 }: DashboardFiltersProps) {
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+  // Generate years: 2 years before to 2 years after current year
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
   const handleSearchChange = (value: string) => {
     onFiltersChange({ ...filters, search: value });

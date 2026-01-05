@@ -34,8 +34,9 @@ import type {
   MonthlyProgressDetail,
   ContractWithProgress,
 } from "@/types/database";
-import { MONTH_NAMES } from "@/types/database";
-import { Info, Trash2, Loader2 } from "lucide-react";
+import { MONTH_NAMES, parsePeriodToNumber, getPeriodMonths } from "@/types/database";
+import { Info, Trash2, Loader2, Pencil } from "lucide-react";
+import { EditPeriodDialog } from "./edit-period-dialog";
 
 interface BAPPTableProps {
   data: CustomerWithAreas[];
@@ -60,6 +61,14 @@ export function BAPPTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [contractToDelete, setContractToDelete] = useState<ContractWithProgress | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [periodDialogOpen, setPeriodDialogOpen] = useState(false);
+  const [contractToEditPeriod, setContractToEditPeriod] = useState<ContractWithProgress | null>(null);
+
+  // Handler for opening period edit dialog
+  const handleEditPeriodClick = (contract: ContractWithProgress) => {
+    setContractToEditPeriod(contract);
+    setPeriodDialogOpen(true);
+  };
 
   // Filter data based on filters
   const filteredData = useMemo(() => {
@@ -315,12 +324,6 @@ export function BAPPTable({
                   {month}
                 </th>
               ))}
-              <th className="w-24 border-r bg-muted px-3 py-3 text-center font-medium">
-                REG / PUSAT
-              </th>
-              <th className="w-20 bg-muted px-3 py-3 text-center font-medium">
-                STATUS
-              </th>
               {isAdmin && (
                 <th className="w-16 bg-muted px-3 py-3 text-center font-medium">
                   AKSI
@@ -379,60 +382,188 @@ export function BAPPTable({
                 </td>
 
                 {/* Period */}
-                <td className="border-r px-3 py-2 text-center text-muted-foreground">
-                  {row.contract.period}
-                </td>
-
-                {/* Monthly progress cells */}
-                {row.contract.monthly_progress.map((progress) => (
-                  <td key={progress.month} className="border-r px-1 py-1">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() =>
-                            handleProgressClick(progress, row.contract)
-                          }
-                          className={`flex h-8 w-full items-center justify-center rounded text-xs font-medium transition-all hover:ring-2 hover:ring-primary/50 ${getProgressColorClass(
-                            progress.percentage
-                          )}`}
-                        >
-                          {progress.percentage}%
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>
-                          {progress.completed_items}/{progress.total_items} item
-                          selesai
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Klik untuk detail
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </td>
-                ))}
-
-                {/* Invoice type */}
                 <td className="border-r px-3 py-2 text-center">
-                  <Badge variant="outline" className="text-xs">
-                    {row.contract.invoice_type}
-                  </Badge>
+                  <div className="flex items-center justify-center gap-1">
+                    <span className="text-muted-foreground">
+                      {row.contract.period}
+                    </span>
+                    {isAdmin && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-primary"
+                            onClick={() => handleEditPeriodClick(row.contract)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Edit periode</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
                 </td>
 
-                {/* Status */}
-                <td className="px-3 py-2 text-center">
-                  <Badge
-                    className={`text-xs ${getStatusColorClass(
-                      row.contract.yearly_status
-                    )}`}
-                  >
-                    {row.contract.yearly_status === "completed"
-                      ? "Selesai"
-                      : row.contract.yearly_status === "in_progress"
-                      ? "Proses"
-                      : "Belum"}
-                  </Badge>
-                </td>
+                {/* Monthly progress cells with merged cell support */}
+                {(() => {
+                  const periodValue = parsePeriodToNumber(row.contract.period);
+                  const activeMonths = getPeriodMonths(periodValue);
+                  const cells: React.ReactNode[] = [];
+
+                  // Format timestamp helper
+                  const formatTimestamp = (dateStr: string | null) => {
+                    if (!dateStr) return null;
+                    try {
+                      const date = new Date(dateStr);
+                      return date.toLocaleDateString("id-ID", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+                    } catch {
+                      return null;
+                    }
+                  };
+
+                  // Track which months we've already rendered
+                  let currentMonth = 1;
+
+                  for (const activeMonth of activeMonths) {
+                    // Calculate colspan: from currentMonth to activeMonth
+                    const colspan = activeMonth - currentMonth + 1;
+
+                    // Get progress for this active month
+                    const progress = row.contract.monthly_progress.find(
+                      (p) => p.month === activeMonth
+                    );
+
+                    if (!progress) {
+                      currentMonth = activeMonth + 1;
+                      continue;
+                    }
+
+                    // Determine status
+                    const status =
+                      progress.percentage === 100
+                        ? "Selesai"
+                        : progress.percentage > 0
+                        ? "Proses"
+                        : "Belum";
+
+                    // Get completed signatures
+                    const completedSignatures = progress.signatures.filter(
+                      (sig) => sig.is_completed
+                    );
+
+                    cells.push(
+                      <td
+                        key={activeMonth}
+                        colSpan={colspan}
+                        className="border-r px-1 py-1"
+                      >
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() =>
+                                handleProgressClick(progress, row.contract)
+                              }
+                              className={`flex h-8 w-full items-center justify-center rounded text-xs font-medium transition-all hover:ring-2 hover:ring-primary/50 ${getProgressColorClass(
+                                progress.percentage
+                              )}`}
+                            >
+                              {progress.percentage}%
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            {/* Progress & Status */}
+                            <div className="flex items-center justify-between gap-4">
+                              <p className="font-medium">
+                                {progress.completed_items}/{progress.total_items}{" "}
+                                item selesai
+                              </p>
+                              <Badge
+                                variant={
+                                  status === "Selesai"
+                                    ? "default"
+                                    : status === "Proses"
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                className="text-xs"
+                              >
+                                {status}
+                              </Badge>
+                            </div>
+
+                            {/* Notes with timestamp */}
+                            {progress.notes && (
+                              <div className="mt-2 border-t pt-2">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  Catatan:
+                                </p>
+                                <p className="text-sm">{progress.notes}</p>
+                                {progress.notes_updated_at && (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    Diupdate:{" "}
+                                    {formatTimestamp(progress.notes_updated_at)}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Completed signatures */}
+                            {completedSignatures.length > 0 && (
+                              <div className="mt-2 border-t pt-2">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  Tanda Tangan Selesai:
+                                </p>
+                                <ul className="mt-1 space-y-1">
+                                  {completedSignatures.map((sig) => (
+                                    <li
+                                      key={sig.id || sig.name}
+                                      className="text-xs"
+                                    >
+                                      <span className="font-medium">
+                                        {sig.name}
+                                      </span>
+                                      {sig.completed_at && (
+                                        <span className="text-muted-foreground">
+                                          {" "}
+                                          - {formatTimestamp(sig.completed_at)}
+                                        </span>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Last updated */}
+                            {progress.updated_at && (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                Update terakhir:{" "}
+                                {formatTimestamp(progress.updated_at)}
+                              </p>
+                            )}
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Klik untuk detail
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </td>
+                    );
+
+                    currentMonth = activeMonth + 1;
+                  }
+
+                  return cells;
+                })()}
 
                 {/* Delete Action */}
                 {isAdmin && (
@@ -470,6 +601,14 @@ export function BAPPTable({
         isAdmin={isAdmin}
         year={year}
         onProgressUpdate={onProgressUpdate}
+      />
+
+      {/* Edit Period Dialog */}
+      <EditPeriodDialog
+        open={periodDialogOpen}
+        onOpenChange={setPeriodDialogOpen}
+        contract={contractToEditPeriod}
+        onPeriodUpdate={onProgressUpdate}
       />
 
       {/* Delete Confirmation Dialog */}

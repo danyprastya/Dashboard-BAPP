@@ -396,17 +396,27 @@ export function ContractFormDialog({
             </div>
           </div>
 
-          {/* Period - Text Input */}
+          {/* Period - Select Dropdown */}
           <div className="space-y-2">
             <Label htmlFor="period">Periode</Label>
-            <Input
-              id="period"
-              placeholder="Contoh: 1 Bulan, Triwulan, dll"
+            <Select
               value={formData.period}
-              onChange={(e) =>
-                setFormData({ ...formData, period: e.target.value })
+              onValueChange={(value) =>
+                setFormData({ ...formData, period: value })
               }
-            />
+            >
+              <SelectTrigger id="period">
+                <SelectValue placeholder="Pilih periode penagihan" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Per 1 Bulan">Per 1 Bulan</SelectItem>
+                <SelectItem value="Per 2 Bulan">Per 2 Bulan</SelectItem>
+                <SelectItem value="Per 3 Bulan">Per 3 Bulan</SelectItem>
+                <SelectItem value="Per 4 Bulan">Per 4 Bulan</SelectItem>
+                <SelectItem value="Per 6 Bulan">Per 6 Bulan</SelectItem>
+                <SelectItem value="Per 12 Bulan">Per 12 Bulan</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Notes - Textarea */}
