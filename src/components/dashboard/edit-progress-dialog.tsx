@@ -15,15 +15,12 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, FileText, PenTool, StickyNote, Eye, ExternalLink } from "lucide-react";
+import { Loader2, Save, FileText, PenTool, StickyNote } from "lucide-react";
 import type { ContractWithProgress } from "@/types/database";
 import { MONTH_NAMES_FULL } from "@/types/database";
 import { updateMonthlyProgress } from "@/lib/supabase/data";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { showSuccessToast, showErrorToast } from "@/lib/toast";
-import { parseFileUrl, getProviderName } from "@/lib/file-preview";
-import { FilePreviewDialog } from "./file-preview-dialog";
 
 interface EditProgressDialogProps {
   open: boolean;
@@ -46,14 +43,14 @@ export function EditProgressDialog({
   const [uploadLink, setUploadLink] = useState("");
   const [isUploadCompleted, setIsUploadCompleted] = useState(false);
   const [notes, setNotes] = useState("");
-  const [signatureStatuses, setSignatureStatuses] = useState<Record<string, boolean>>({});
-  const [showPreview, setShowPreview] = useState(false);
+  const [signatureStatuses, setSignatureStatuses] = useState<
+    Record<string, boolean>
+  >({});
 
   // Get the progress for this month
-  const monthProgress = contract.monthly_progress.find((p) => p.month === month);
-
-  // Parse the upload link for preview info
-  const fileInfo = parseFileUrl(uploadLink);
+  const monthProgress = contract.monthly_progress.find(
+    (p) => p.month === month
+  );
 
   // Initialize form state when dialog opens
   useEffect(() => {
@@ -69,15 +66,13 @@ export function EditProgressDialog({
     }
   }, [open, monthProgress]);
 
-  // Handle signature status change
-  const handleSignatureChange = (signatureId: string, isCompleted: boolean) => {
+  const handleSignatureChange = (signatureId: string, checked: boolean) => {
     setSignatureStatuses((prev) => ({
       ...prev,
-      [signatureId]: isCompleted,
+      [signatureId]: checked,
     }));
   };
 
-  // Handle save
   const handleSave = async () => {
     setIsLoading(true);
     try {
@@ -99,10 +94,10 @@ export function EditProgressDialog({
           notes || null,
           sigStatuses
         );
+      } else {
+        // Simulate delay for placeholder mode
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
-
-      // Simulate delay for placeholder mode
-      await new Promise((resolve) => setTimeout(resolve, 500));
 
       showSuccessToast("Progress berhasil diperbarui", {
         description: `${contract.name} - ${
@@ -131,15 +126,15 @@ export function EditProgressDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+      <DialogContent className="min-w-[25vw] max-w-[95vw] h-auto max-h-[90vh] flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="text-lg">Edit Progress</DialogTitle>
           <DialogDescription className="text-sm">
             {contract.name} - {MONTH_NAMES_FULL[month - 1]} {year}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-4 pr-2">
           {/* Preview new percentage */}
           <div className="flex items-center justify-between rounded-lg bg-muted p-3">
             <span className="text-sm font-medium">Progress Baru</span>
@@ -235,51 +230,19 @@ export function EditProgressDialog({
 
               <div className="space-y-2">
                 <Label htmlFor="upload-link">Link Dokumen</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="upload-link"
-                    placeholder="Paste link Google Drive, OneDrive, dll..."
-                    value={uploadLink}
-                    onChange={(e) => setUploadLink(e.target.value)}
-                    disabled={!isUploadCompleted}
-                    className="flex-1"
-                  />
-                  {uploadLink && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setShowPreview(true)}
-                      title="Preview dokumen"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                
-                {/* Link info badge */}
-                {uploadLink && (
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">
-                      {getProviderName(fileInfo.type)}
-                    </Badge>
-                    {fileInfo.canEmbed ? (
-                      <span className="text-xs text-green-600">✓ Preview tersedia</span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Preview tidak tersedia</span>
-                    )}
-                  </div>
-                )}
-                
-                <p className="text-xs text-muted-foreground">
-                  Paste link dari Google Drive, OneDrive, atau Dropbox
-                </p>
+                <Input
+                  id="upload-link"
+                  placeholder="https://..."
+                  value={uploadLink}
+                  onChange={(e) => setUploadLink(e.target.value)}
+                  disabled={!isUploadCompleted}
+                />
               </div>
             </div>
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Batal
           </Button>
@@ -290,15 +253,6 @@ export function EditProgressDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
-
-      {/* File Preview Dialog */}
-      <FilePreviewDialog
-        open={showPreview}
-        onOpenChange={setShowPreview}
-        url={uploadLink}
-        title={`Dokumen - ${MONTH_NAMES_FULL[month - 1]} ${year}`}
-        description={contract.name}
-      />
     </Dialog>
   );
 }

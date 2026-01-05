@@ -729,11 +729,7 @@ export function EditContractDialog({
                             placeholder="Nama penanda tangan"
                             value={sig.name}
                             onChange={(e) =>
-                              handleSignatureChange(
-                                sig.id,
-                                "name",
-                                e.target.value
-                              )
+                              handleSignatureChange(sig.id, "name", e.target.value)
                             }
                             className="flex-1"
                           />
@@ -744,11 +740,7 @@ export function EditContractDialog({
                             placeholder="Jabatan (opsional)"
                             value={sig.role}
                             onChange={(e) =>
-                              handleSignatureChange(
-                                sig.id,
-                                "role",
-                                e.target.value
-                              )
+                              handleSignatureChange(sig.id, "role", e.target.value)
                             }
                             className="flex-1"
                           />
@@ -768,8 +760,7 @@ export function EditContractDialog({
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Minimal 1 tanda tangan diperlukan. Perubahan tanda tangan akan
-                  mempengaruhi perhitungan progress.
+                  Minimal 1 tanda tangan diperlukan. Perubahan tanda tangan akan mempengaruhi perhitungan progress.
                 </p>
               </div>
 

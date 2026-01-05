@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, AlertTriangle, ArrowRight, FileText } from "lucide-react";
 import {
@@ -28,9 +27,12 @@ import {
   getPeriodMonths,
   parsePeriodToNumber,
 } from "@/types/database";
-import type { ContractWithProgress, MonthlyProgressDetail } from "@/types/database";
+import type { ContractWithProgress } from "@/types/database";
 import { showSuccessToast, showErrorToast } from "@/lib/toast";
-import { migrateContractPeriod, type PeriodMigrationConfig } from "@/lib/supabase/data";
+import {
+  migrateContractPeriod,
+  type PeriodMigrationConfig,
+} from "@/lib/supabase/data";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 interface EditPeriodDialogProps {
@@ -42,8 +44,18 @@ interface EditPeriodDialogProps {
 
 // Short month names
 const SHORT_MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
-  "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "Mei",
+  "Jun",
+  "Jul",
+  "Agu",
+  "Sep",
+  "Okt",
+  "Nov",
+  "Des",
 ];
 
 // Helper to get month range label
@@ -51,7 +63,9 @@ function getMonthRangeLabel(startMonth: number, endMonth: number): string {
   if (startMonth === endMonth) {
     return SHORT_MONTH_NAMES[startMonth - 1];
   }
-  return `${SHORT_MONTH_NAMES[startMonth - 1]} - ${SHORT_MONTH_NAMES[endMonth - 1]}`;
+  return `${SHORT_MONTH_NAMES[startMonth - 1]} - ${
+    SHORT_MONTH_NAMES[endMonth - 1]
+  }`;
 }
 
 // Helper to get the start month of a period given the end month
@@ -60,10 +74,12 @@ function getPeriodStartMonth(endMonth: number, periodValue: number): number {
 }
 
 // Generate progress options based on total signatures
-function generateProgressOptions(totalSignatures: number): { value: number; label: string }[] {
+function generateProgressOptions(
+  totalSignatures: number
+): { value: number; label: string }[] {
   const totalItems = totalSignatures + 1; // +1 for upload
   const options: { value: number; label: string }[] = [];
-  
+
   for (let i = 0; i <= totalItems; i++) {
     const percentage = Math.round((i / totalItems) * 100);
     options.push({
@@ -71,7 +87,7 @@ function generateProgressOptions(totalSignatures: number): { value: number; labe
       label: `${percentage}% (${i}/${totalItems} selesai)`,
     });
   }
-  
+
   return options;
 }
 
@@ -84,15 +100,21 @@ export function EditPeriodDialog({
   const [selectedPeriod, setSelectedPeriod] = useState<number>(1);
   const [isUpdating, setIsUpdating] = useState(false);
   const [step, setStep] = useState<"select" | "configure">("select");
-  
+
   // Configuration for merge (converting UP)
-  const [mergeMode, setMergeMode] = useState<"highest" | "last" | "manual">("highest");
+  const [mergeMode, setMergeMode] = useState<"highest" | "last" | "manual">(
+    "highest"
+  );
   const [manualMergeValue, setManualMergeValue] = useState<number>(0);
   const [selectedNotes, setSelectedNotes] = useState<number[]>([]);
-  
+
   // Configuration for split (converting DOWN)
-  const [splitMode, setSplitMode] = useState<"duplicate" | "last" | "manual">("duplicate");
-  const [manualSplitValues, setManualSplitValues] = useState<Record<number, number>>({});
+  const [splitMode, setSplitMode] = useState<"duplicate" | "last" | "manual">(
+    "duplicate"
+  );
+  const [manualSplitValues, setManualSplitValues] = useState<
+    Record<number, number>
+  >({});
 
   // Get current period value from contract
   const currentPeriodValue = useMemo(() => {
@@ -153,7 +175,11 @@ export function EditPeriodDialog({
 
     const affected: {
       targetRange: { start: number; end: number };
-      sourceMonths: { month: number; percentage: number; notes: string | null }[];
+      sourceMonths: {
+        month: number;
+        percentage: number;
+        notes: string | null;
+      }[];
       highestPercentage: number;
       lastMonthPercentage: number;
     }[] = [];
@@ -164,8 +190,12 @@ export function EditPeriodDialog({
       );
 
       if (sourceMonths.length > 0) {
-        const highestPercentage = Math.max(...sourceMonths.map((m) => m.percentage));
-        const lastMonthData = contract.monthly_progress.find((p) => p.month === range.end);
+        const highestPercentage = Math.max(
+          ...sourceMonths.map((m) => m.percentage)
+        );
+        const lastMonthData = contract.monthly_progress.find(
+          (p) => p.month === range.end
+        );
 
         affected.push({
           targetRange: range,
@@ -196,10 +226,18 @@ export function EditPeriodDialog({
     }[] = [];
 
     for (const sourceEndMonth of currentActiveMonths) {
-      const sourceStartMonth = getPeriodStartMonth(sourceEndMonth, currentPeriodValue);
-      const sourceProgress = contract.monthly_progress.find((p) => p.month === sourceEndMonth);
+      const sourceStartMonth = getPeriodStartMonth(
+        sourceEndMonth,
+        currentPeriodValue
+      );
+      const sourceProgress = contract.monthly_progress.find(
+        (p) => p.month === sourceEndMonth
+      );
 
-      if (sourceProgress && (sourceProgress.percentage > 0 || sourceProgress.notes)) {
+      if (
+        sourceProgress &&
+        (sourceProgress.percentage > 0 || sourceProgress.notes)
+      ) {
         // Find which new ranges fall within this source range
         const targetRanges = activeMonthRanges.filter(
           (r) => r.start >= sourceStartMonth && r.end <= sourceEndMonth
@@ -219,7 +257,8 @@ export function EditPeriodDialog({
     return affected;
   }, [contract, isConvertingDown, currentPeriodValue, activeMonthRanges]);
 
-  const hasAffectedData = mergeAffectedData.length > 0 || splitAffectedData.length > 0;
+  const hasAffectedData =
+    mergeAffectedData.length > 0 || splitAffectedData.length > 0;
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -257,7 +296,8 @@ export function EditPeriodDialog({
   };
 
   // Get year from contract's monthly progress
-  const currentYear = contract?.monthly_progress[0]?.year || new Date().getFullYear();
+  const currentYear =
+    contract?.monthly_progress[0]?.year || new Date().getFullYear();
 
   // Handle save
   const handleSave = async () => {
@@ -279,11 +319,12 @@ export function EditPeriodDialog({
           migrationConfig.mergeConfig = mergeAffectedData.map((data) => {
             // Determine which source month to use based on mode
             let sourceMonth: number;
-            
+
             if (mergeMode === "highest") {
               // Find month with highest percentage
-              const highestMonth = data.sourceMonths.reduce((highest, current) =>
-                current.percentage > highest.percentage ? current : highest
+              const highestMonth = data.sourceMonths.reduce(
+                (highest, current) =>
+                  current.percentage > highest.percentage ? current : highest
               );
               sourceMonth = highestMonth.month;
             } else if (mergeMode === "last") {
@@ -325,11 +366,14 @@ export function EditPeriodDialog({
                 percentage = data.sourcePercentage;
               } else if (splitMode === "last") {
                 // Only last range gets the percentage
-                const isLast = range.end === data.targetRanges[data.targetRanges.length - 1].end;
+                const isLast =
+                  range.end ===
+                  data.targetRanges[data.targetRanges.length - 1].end;
                 percentage = isLast ? data.sourcePercentage : 0;
               } else {
                 // Manual
-                percentage = manualSplitValues[range.end] ?? data.sourcePercentage;
+                percentage =
+                  manualSplitValues[range.end] ?? data.sourcePercentage;
               }
 
               return {
@@ -361,7 +405,9 @@ export function EditPeriodDialog({
         });
       }
 
-      showSuccessToast(`Periode berhasil diubah ke Per ${selectedPeriod} Bulan`);
+      showSuccessToast(
+        `Periode berhasil diubah ke Per ${selectedPeriod} Bulan`
+      );
       onOpenChange(false);
       onPeriodUpdate?.();
     } catch (error) {
@@ -408,7 +454,10 @@ export function EditPeriodDialog({
                   </SelectTrigger>
                   <SelectContent>
                     {PERIOD_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value.toString()}>
+                      <SelectItem
+                        key={option.value}
+                        value={option.value.toString()}
+                      >
                         {option.label}
                       </SelectItem>
                     ))}
@@ -421,7 +470,11 @@ export function EditPeriodDialog({
                 <p className="mb-2 text-sm font-medium">Bulan Aktif:</p>
                 <div className="flex flex-wrap gap-1">
                   {activeMonthRanges.map((range) => (
-                    <Badge key={range.end} variant="secondary" className="text-xs">
+                    <Badge
+                      key={range.end}
+                      variant="secondary"
+                      className="text-xs"
+                    >
                       {getMonthRangeLabel(range.start, range.end)}
                     </Badge>
                   ))}
@@ -445,246 +498,295 @@ export function EditPeriodDialog({
           ) : (
             <div className="space-y-6 py-4">
               {/* Configure Merge (Converting UP) */}
-              {isConvertingUp && mergeAffectedData.map((data, idx) => (
-                <div key={idx} className="rounded-lg border p-4 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-sm">
-                      {getMonthRangeLabel(data.targetRange.start, data.targetRange.end)}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground">
-                      ({data.sourceMonths.length} bulan dengan data)
-                    </span>
-                  </div>
-
-                  {/* Show source data */}
-                  <div className="text-sm space-y-1 bg-muted/50 rounded p-2">
-                    {data.sourceMonths.map((m) => (
-                      <div key={m.month} className="flex items-center gap-2">
-                        <span className="font-medium">{SHORT_MONTH_NAMES[m.month - 1]}:</span>
-                        <span>{m.percentage}%</span>
-                        {m.notes && (
-                          <FileText className="h-3 w-3 text-muted-foreground" />
+              {isConvertingUp &&
+                mergeAffectedData.map((data, idx) => (
+                  <div key={idx} className="rounded-lg border p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-sm">
+                        {getMonthRangeLabel(
+                          data.targetRange.start,
+                          data.targetRange.end
                         )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Mode selection */}
-                  <div className="space-y-2">
-                    <Label className="text-sm">Pilih data yang akan digunakan:</Label>
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`merge-mode-${idx}`}
-                          checked={mergeMode === "highest"}
-                          onChange={() => setMergeMode("highest")}
-                          className="h-4 w-4"
-                        />
-                        <span className="text-sm">
-                          Nilai tertinggi ({data.highestPercentage}%)
-                        </span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`merge-mode-${idx}`}
-                          checked={mergeMode === "last"}
-                          onChange={() => setMergeMode("last")}
-                          className="h-4 w-4"
-                        />
-                        <span className="text-sm">
-                          Bulan terakhir periode ({data.lastMonthPercentage}%)
-                        </span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`merge-mode-${idx}`}
-                          checked={mergeMode === "manual"}
-                          onChange={() => setMergeMode("manual")}
-                          className="h-4 w-4"
-                        />
-                        <span className="text-sm">Pilih manual:</span>
-                        {mergeMode === "manual" && (
-                          <Select
-                            value={manualMergeValue.toString()}
-                            onValueChange={(v) => setManualMergeValue(parseInt(v))}
-                          >
-                            <SelectTrigger className="w-40 h-8">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {progressOptions.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value.toString()}>
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </label>
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        ({data.sourceMonths.length} bulan dengan data)
+                      </span>
                     </div>
-                  </div>
 
-                  {/* Notes selection */}
-                  {monthsWithNotes.length > 0 && (
-                    <>
-                      <Separator />
-                      <div className="space-y-2">
-                        <Label className="text-sm flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          Pilih catatan yang akan disimpan:
-                        </Label>
-                        <div className="space-y-2">
-                          {monthsWithNotes
-                            .filter((m) => m.month >= data.targetRange.start && m.month <= data.targetRange.end)
-                            .map((m) => (
-                              <label key={m.month} className="flex items-start gap-2 cursor-pointer">
-                                <Checkbox
-                                  checked={selectedNotes.includes(m.month)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setSelectedNotes([...selectedNotes, m.month]);
-                                    } else {
-                                      setSelectedNotes(selectedNotes.filter((n) => n !== m.month));
-                                    }
-                                  }}
-                                />
-                                <div className="text-sm">
-                                  <span className="font-medium">{SHORT_MONTH_NAMES[m.month - 1]}:</span>
-                                  <span className="text-muted-foreground ml-1 line-clamp-2">
-                                    {m.notes}
-                                  </span>
-                                </div>
-                              </label>
-                            ))}
+                    {/* Show source data */}
+                    <div className="text-sm space-y-1 bg-muted/50 rounded p-2">
+                      {data.sourceMonths.map((m) => (
+                        <div key={m.month} className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {SHORT_MONTH_NAMES[m.month - 1]}:
+                          </span>
+                          <span>{m.percentage}%</span>
+                          {m.notes && (
+                            <FileText className="h-3 w-3 text-muted-foreground" />
+                          )}
                         </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
+                      ))}
+                    </div>
 
-              {/* Configure Split (Converting DOWN) */}
-              {isConvertingDown && splitAffectedData.map((data, idx) => (
-                <div key={idx} className="rounded-lg border p-4 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-sm">
-                      {getMonthRangeLabel(data.sourceRange.start, data.sourceRange.end)}
-                    </Badge>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      {data.targetRanges.length} periode baru
-                    </span>
-                  </div>
-
-                  {/* Show source data */}
-                  <div className="text-sm bg-muted/50 rounded p-2">
-                    <span className="font-medium">Data saat ini:</span>
-                    <span className="ml-2">{data.sourcePercentage}%</span>
-                    {data.sourceNotes && (
-                      <div className="mt-1 text-muted-foreground line-clamp-1">
-                        <FileText className="h-3 w-3 inline mr-1" />
-                        {data.sourceNotes}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Mode selection */}
-                  <div className="space-y-3">
-                    <Label className="text-sm">Pilih cara pembagian data:</Label>
-                    
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`split-mode-${idx}`}
-                        checked={splitMode === "duplicate"}
-                        onChange={() => setSplitMode("duplicate")}
-                        className="h-4 w-4"
-                      />
-                      <span className="text-sm">
-                        Duplikasi ke semua periode ({data.sourcePercentage}%)
-                      </span>
-                    </label>
-                    
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`split-mode-${idx}`}
-                        checked={splitMode === "last"}
-                        onChange={() => setSplitMode("last")}
-                        className="h-4 w-4"
-                      />
-                      <span className="text-sm">
-                        Hanya periode terakhir ({getMonthRangeLabel(
-                          data.targetRanges[data.targetRanges.length - 1].start,
-                          data.targetRanges[data.targetRanges.length - 1].end
-                        )} = {data.sourcePercentage}%, lainnya 0%)
-                      </span>
-                    </label>
-                    
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`split-mode-${idx}`}
-                        checked={splitMode === "manual"}
-                        onChange={() => setSplitMode("manual")}
-                        className="h-4 w-4 mt-1"
-                      />
-                      <span className="text-sm">Pilih manual untuk setiap periode:</span>
-                    </label>
-
-                    {splitMode === "manual" && (
-                      <div className="ml-6 grid grid-cols-3 gap-2">
-                        {data.targetRanges.map((range) => (
-                          <div key={range.end} className="flex items-center gap-1">
-                            <span className="text-xs font-medium w-12">
-                              {getMonthRangeLabel(range.start, range.end)}:
-                            </span>
+                    {/* Mode selection */}
+                    <div className="space-y-2">
+                      <Label className="text-sm">
+                        Pilih data yang akan digunakan:
+                      </Label>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`merge-mode-${idx}`}
+                            checked={mergeMode === "highest"}
+                            onChange={() => setMergeMode("highest")}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm">
+                            Nilai tertinggi ({data.highestPercentage}%)
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`merge-mode-${idx}`}
+                            checked={mergeMode === "last"}
+                            onChange={() => setMergeMode("last")}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm">
+                            Bulan terakhir periode ({data.lastMonthPercentage}%)
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`merge-mode-${idx}`}
+                            checked={mergeMode === "manual"}
+                            onChange={() => setMergeMode("manual")}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm">Pilih manual:</span>
+                          {mergeMode === "manual" && (
                             <Select
-                              value={(manualSplitValues[range.end] ?? data.sourcePercentage).toString()}
-                              onValueChange={(v) => 
-                                setManualSplitValues({
-                                  ...manualSplitValues,
-                                  [range.end]: parseInt(v),
-                                })
+                              value={manualMergeValue.toString()}
+                              onValueChange={(v) =>
+                                setManualMergeValue(parseInt(v))
                               }
                             >
-                              <SelectTrigger className="h-7 text-xs flex-1">
+                              <SelectTrigger className="w-40 h-8">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
                                 {progressOptions.map((opt) => (
-                                  <SelectItem key={opt.value} value={opt.value.toString()}>
-                                    {opt.value}%
+                                  <SelectItem
+                                    key={opt.value}
+                                    value={opt.value.toString()}
+                                  >
+                                    {opt.label}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                          </div>
-                        ))}
+                          )}
+                        </label>
                       </div>
+                    </div>
+
+                    {/* Notes selection */}
+                    {monthsWithNotes.length > 0 && (
+                      <>
+                        <Separator />
+                        <div className="space-y-2">
+                          <Label className="text-sm flex items-center gap-2">
+                            <FileText className="h-4 w-4" />
+                            Pilih catatan yang akan disimpan:
+                          </Label>
+                          <div className="space-y-2">
+                            {monthsWithNotes
+                              .filter(
+                                (m) =>
+                                  m.month >= data.targetRange.start &&
+                                  m.month <= data.targetRange.end
+                              )
+                              .map((m) => (
+                                <label
+                                  key={m.month}
+                                  className="flex items-start gap-2 cursor-pointer"
+                                >
+                                  <Checkbox
+                                    checked={selectedNotes.includes(m.month)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedNotes([
+                                          ...selectedNotes,
+                                          m.month,
+                                        ]);
+                                      } else {
+                                        setSelectedNotes(
+                                          selectedNotes.filter(
+                                            (n) => n !== m.month
+                                          )
+                                        );
+                                      }
+                                    }}
+                                  />
+                                  <div className="text-sm">
+                                    <span className="font-medium">
+                                      {SHORT_MONTH_NAMES[m.month - 1]}:
+                                    </span>
+                                    <span className="text-muted-foreground ml-1 line-clamp-2">
+                                      {m.notes}
+                                    </span>
+                                  </div>
+                                </label>
+                              ))}
+                          </div>
+                        </div>
+                      </>
                     )}
                   </div>
+                ))}
 
-                  {/* Notes for split */}
-                  {data.sourceNotes && (
-                    <>
-                      <Separator />
-                      <div className="space-y-2">
-                        <Label className="text-sm flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          Catatan akan diduplikasi ke semua periode baru
-                        </Label>
-                        <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
+              {/* Configure Split (Converting DOWN) */}
+              {isConvertingDown &&
+                splitAffectedData.map((data, idx) => (
+                  <div key={idx} className="rounded-lg border p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-sm">
+                        {getMonthRangeLabel(
+                          data.sourceRange.start,
+                          data.sourceRange.end
+                        )}
+                      </Badge>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        {data.targetRanges.length} periode baru
+                      </span>
+                    </div>
+
+                    {/* Show source data */}
+                    <div className="text-sm bg-muted/50 rounded p-2">
+                      <span className="font-medium">Data saat ini:</span>
+                      <span className="ml-2">{data.sourcePercentage}%</span>
+                      {data.sourceNotes && (
+                        <div className="mt-1 text-muted-foreground line-clamp-1">
+                          <FileText className="h-3 w-3 inline mr-1" />
                           {data.sourceNotes}
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Mode selection */}
+                    <div className="space-y-3">
+                      <Label className="text-sm">
+                        Pilih cara pembagian data:
+                      </Label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`split-mode-${idx}`}
+                          checked={splitMode === "duplicate"}
+                          onChange={() => setSplitMode("duplicate")}
+                          className="h-4 w-4"
+                        />
+                        <span className="text-sm">
+                          Duplikasi ke semua periode ({data.sourcePercentage}%)
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`split-mode-${idx}`}
+                          checked={splitMode === "last"}
+                          onChange={() => setSplitMode("last")}
+                          className="h-4 w-4"
+                        />
+                        <span className="text-sm">
+                          Hanya periode terakhir (
+                          {getMonthRangeLabel(
+                            data.targetRanges[data.targetRanges.length - 1]
+                              .start,
+                            data.targetRanges[data.targetRanges.length - 1].end
+                          )}{" "}
+                          = {data.sourcePercentage}%, lainnya 0%)
+                        </span>
+                      </label>
+
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`split-mode-${idx}`}
+                          checked={splitMode === "manual"}
+                          onChange={() => setSplitMode("manual")}
+                          className="h-4 w-4 mt-1"
+                        />
+                        <span className="text-sm">
+                          Pilih manual untuk setiap periode:
+                        </span>
+                      </label>
+
+                      {splitMode === "manual" && (
+                        <div className="ml-6 grid grid-cols-3 gap-2">
+                          {data.targetRanges.map((range) => (
+                            <div
+                              key={range.end}
+                              className="flex items-center gap-1"
+                            >
+                              <span className="text-xs font-medium w-12">
+                                {getMonthRangeLabel(range.start, range.end)}:
+                              </span>
+                              <Select
+                                value={(
+                                  manualSplitValues[range.end] ??
+                                  data.sourcePercentage
+                                ).toString()}
+                                onValueChange={(v) =>
+                                  setManualSplitValues({
+                                    ...manualSplitValues,
+                                    [range.end]: parseInt(v),
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="h-7 text-xs flex-1">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {progressOptions.map((opt) => (
+                                    <SelectItem
+                                      key={opt.value}
+                                      value={opt.value.toString()}
+                                    >
+                                      {opt.value}%
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Notes for split */}
+                    {data.sourceNotes && (
+                      <>
+                        <Separator />
+                        <div className="space-y-2">
+                          <Label className="text-sm flex items-center gap-2">
+                            <FileText className="h-4 w-4" />
+                            Catatan akan diduplikasi ke semua periode baru
+                          </Label>
+                          <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
+                            {data.sourceNotes}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
             </div>
           )}
         </div>
@@ -703,7 +805,9 @@ export function EditPeriodDialog({
             disabled={isUpdating || selectedPeriod === currentPeriodValue}
           >
             {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {step === "select" && hasAffectedData && selectedPeriod !== currentPeriodValue
+            {step === "select" &&
+            hasAffectedData &&
+            selectedPeriod !== currentPeriodValue
               ? "Lanjutkan"
               : "Simpan Perubahan"}
           </Button>

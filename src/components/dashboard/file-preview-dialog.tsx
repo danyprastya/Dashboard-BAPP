@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { parseFileUrl, getProviderName } from "@/lib/file-preview";
 import {
   ExternalLink,
-  Download,
   X,
   FileText,
   Loader2,
@@ -112,7 +111,9 @@ export function FilePreviewDialog({
                   )}
                 </div>
                 <div>
-                  <p className="font-medium text-destructive">{fileInfo.error.message}</p>
+                  <p className="font-medium text-destructive">
+                    {fileInfo.error.message}
+                  </p>
                   <p className="text-sm text-muted-foreground mt-2">
                     {fileInfo.error.suggestion}
                   </p>
@@ -153,7 +154,8 @@ export function FilePreviewDialog({
                     <div>
                       <p className="font-medium">Tidak dapat memuat preview</p>
                       <p className="text-sm text-muted-foreground mt-1">
-                        File mungkin tidak tersedia atau tidak mendukung preview.
+                        File mungkin tidak tersedia atau tidak mendukung
+                        preview.
                         <br />
                         Coba buka di tab baru.
                       </p>
@@ -217,7 +219,11 @@ export function FilePreviewDialog({
               <ExternalLink className="h-4 w-4 mr-2" />
               Buka di Tab Baru
             </Button>
-            <Button variant="default" size="sm" onClick={() => onOpenChange(false)}>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+            >
               <X className="h-4 w-4 mr-2" />
               Tutup
             </Button>
