@@ -11,6 +11,7 @@ import type {
   SignatureDetail,
   UserProfile,
 } from "@/types/database";
+import { isHalfMonthPeriod } from "@/types/database";
 
 // ===================
 // FETCH FUNCTIONS
@@ -252,13 +253,20 @@ export async function fetchDashboardData(year: number): Promise<CustomerWithArea
             (sig) => sig.contract_id === contract.id
           );
 
-          // Build monthly progress for all 12 months
-          const monthlyProgressData: MonthlyProgressDetail[] = Array.from(
-            { length: 12 },
-            (_, i) => {
-              const month = i + 1;
+          // Check if this contract uses half-month periods
+          const isHalfMonth = isHalfMonthPeriod(contract.period);
+
+          // Build monthly progress - 24 items for half-month, 12 for regular
+          const monthlyProgressData: MonthlyProgressDetail[] = [];
+          
+          for (let month = 1; month <= 12; month++) {
+            const subPeriods = isHalfMonth ? [1, 2] : [1];
+            
+            for (const subPeriod of subPeriods) {
               const progress = (monthlyProgress || []).find(
-                (p) => p.contract_id === contract.id && p.month === month
+                (p) => p.contract_id === contract.id && 
+                       p.month === month && 
+                       (p.sub_period === subPeriod || (!isHalfMonth && (p.sub_period === 1 || p.sub_period === undefined)))
               );
 
               const signaturesWithStatus: SignatureDetail[] =
@@ -292,10 +300,11 @@ export async function fetchDashboardData(year: number): Promise<CustomerWithArea
                   ? Math.round((completedItems / totalItems) * 100)
                   : 0;
 
-              return {
+              monthlyProgressData.push({
                 id: progress?.id || null,
                 month,
                 year,
+                sub_period: subPeriod,
                 signatures: signaturesWithStatus,
                 is_upload_completed: isUploadCompleted,
                 upload_link: progress?.upload_link || null,
@@ -305,9 +314,9 @@ export async function fetchDashboardData(year: number): Promise<CustomerWithArea
                 percentage,
                 total_items: totalItems,
                 completed_items: completedItems,
-              };
+              });
             }
-          );
+          }
 
           // Calculate yearly status
           const allCompleted = monthlyProgressData.every(
@@ -668,7 +677,8 @@ export async function updateMonthlyProgress(
   uploadLink: string | null,
   isUploadCompleted: boolean,
   notes: string | null,
-  signatureStatuses: { signatureId: string; isCompleted: boolean }[]
+  signatureStatuses: { signatureId: string; isCompleted: boolean }[],
+  subPeriod: number = 1
 ): Promise<void> {
   const supabase = createClient();
   if (!supabase) return;
@@ -680,6 +690,7 @@ export async function updateMonthlyProgress(
     .eq("contract_id", contractId)
     .eq("month", month)
     .eq("year", year)
+    .eq("sub_period", subPeriod)
     .single();
 
   if (!progress) {
@@ -690,6 +701,7 @@ export async function updateMonthlyProgress(
         contract_id: contractId,
         month,
         year,
+        sub_period: subPeriod,
         upload_link: uploadLink,
         is_upload_completed: isUploadCompleted,
         notes: notes,
@@ -779,6 +791,8 @@ export interface PeriodMigrationConfig {
     sourceMonth: number; // Source month with data
     targetMonths: { month: number; percentage: number }[]; // Distribution
   }[];
+  // For half-month conversion: how to handle P2
+  halfMonthMode?: "duplicate" | "empty";
 }
 
 export async function migrateContractPeriod(
@@ -787,7 +801,7 @@ export async function migrateContractPeriod(
   const supabase = createClient();
   if (!supabase) return;
 
-  const { contractId, year, newPeriod, mergeConfig, splitConfig } = config;
+  const { contractId, year, newPeriod, mergeConfig, splitConfig, halfMonthMode = "duplicate" } = config;
 
   // First, get all existing monthly progress and signature progress
   const { data: existingProgress } = await supabase
@@ -975,7 +989,10 @@ export async function migrateContractPeriod(
   // Calculate which months should be ACTIVE in the new period
   const activeMonths = new Set<number>();
   
-  if (newPeriod === 1) {
+  if (newPeriod === 0.5) {
+    // Per 1/2 Bulan: all months 1-12 are active (with 2 sub_periods each)
+    for (let i = 1; i <= 12; i++) activeMonths.add(i);
+  } else if (newPeriod === 1) {
     // Per 1 Bulan: all months 1-12 are active
     for (let i = 1; i <= 12; i++) activeMonths.add(i);
   } else if (newPeriod === 2) {
@@ -1019,14 +1036,104 @@ export async function migrateContractPeriod(
     }
   }
 
-  // Update contract period
+  // Update contract period - special handling for 0.5 (half-month)
+  const periodString = newPeriod === 0.5 ? "Per 1/2 Bulan" : `Per ${newPeriod} Bulan`;
+  
   await supabase
     .from("bapp_contracts")
     .update({
-      period: `Per ${newPeriod} Bulan`,
+      period: periodString,
       updated_at: new Date().toISOString(),
     })
     .eq("id", contractId);
+
+  // For half-month period, create sub_period entries for all months
+  if (newPeriod === 0.5) {
+    for (let month = 1; month <= 12; month++) {
+      // Get existing data (from previous period, might have sub_period = 1, null, or not exist)
+      const existingData = existingProgress?.find(
+        (p) => p.month === month && (p.sub_period === 1 || !p.sub_period || p.sub_period === null)
+      );
+
+      // Check if P1 entry exists with sub_period = 1
+      const { data: existingP1 } = await supabase
+        .from("monthly_progress")
+        .select("id, sub_period")
+        .eq("contract_id", contractId)
+        .eq("month", month)
+        .eq("year", year)
+        .eq("sub_period", 1)
+        .maybeSingle();
+
+      // Check if P2 entry exists
+      const { data: existingP2 } = await supabase
+        .from("monthly_progress")
+        .select("id")
+        .eq("contract_id", contractId)
+        .eq("month", month)
+        .eq("year", year)
+        .eq("sub_period", 2)
+        .maybeSingle();
+
+      // Handle P1 entry
+      if (!existingP1 && existingData) {
+        // Update existing entry to be P1 (set sub_period = 1)
+        await supabase
+          .from("monthly_progress")
+          .update({
+            sub_period: 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingData.id);
+      } else if (!existingP1) {
+        // Create new P1 entry if no existing data
+        await supabase
+          .from("monthly_progress")
+          .insert({
+            contract_id: contractId,
+            month,
+            year,
+            sub_period: 1,
+            upload_link: null,
+            is_upload_completed: false,
+            notes: null,
+          });
+      }
+
+      // Handle P2 entry
+      if (!existingP2) {
+        // Determine if we should duplicate from existing data
+        const shouldDuplicate = halfMonthMode === "duplicate" && existingData;
+        
+        // Create P2 entry
+        const { data: newP2Progress } = await supabase
+          .from("monthly_progress")
+          .insert({
+            contract_id: contractId,
+            month,
+            year,
+            sub_period: 2,
+            upload_link: shouldDuplicate ? existingData.upload_link : null,
+            is_upload_completed: shouldDuplicate ? existingData.is_upload_completed : false,
+            notes: shouldDuplicate ? existingData.notes : null,
+          })
+          .select()
+          .single();
+
+        // Copy signature progress if duplicating
+        if (newP2Progress && shouldDuplicate && existingData.signature_progress) {
+          for (const sigProgress of existingData.signature_progress) {
+            await supabase.from("signature_progress").insert({
+              monthly_progress_id: newP2Progress.id,
+              signature_id: sigProgress.signature_id,
+              is_completed: sigProgress.is_completed,
+              completed_at: sigProgress.completed_at,
+            });
+          }
+        }
+      }
+    }
+  }
 }
 
 // ===================

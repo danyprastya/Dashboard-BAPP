@@ -38,6 +38,7 @@ import {
   MONTH_NAMES,
   parsePeriodToNumber,
   getPeriodMonths,
+  isHalfMonthPeriod,
 } from "@/types/database";
 import {
   Info,
@@ -161,6 +162,9 @@ export function BAPPTable({
     customerRowSpan: number;
     isFirstInContractGroup: boolean;
     contractRowSpan: number;
+    // For half-month periods
+    subPeriod: number; // 1 for P1, 2 for P2, 0 for regular periods
+    isFirstSubPeriod: boolean; // true if this is P1 (first sub-period row)
   };
 
   const flattenedRows = useMemo(() => {
@@ -185,22 +189,63 @@ export function BAPPTable({
         a.contract.name.localeCompare(b.contract.name)
       );
 
-      const totalContractsInCustomer = allContractsInCustomer.length;
+      // Calculate total rows for this customer (considering half-month periods have 2 rows)
+      const totalRowsInCustomer = allContractsInCustomer.reduce((total, { contract }) => {
+        return total + (isHalfMonthPeriod(contract.period) ? 2 : 1);
+      }, 0);
+      
       let isFirstInCustomer = true;
 
       allContractsInCustomer.forEach(({ area, contract }) => {
-        rowNum++;
-        rows.push({
-          customer,
-          area,
-          contract,
-          rowNumber: rowNum,
-          isFirstInCustomer,
-          customerRowSpan: totalContractsInCustomer,
-          isFirstInContractGroup: false, // Will be calculated below
-          contractRowSpan: 1, // Will be calculated below
-        });
-        isFirstInCustomer = false;
+        const isHalfMonth = isHalfMonthPeriod(contract.period);
+        
+        if (isHalfMonth) {
+          // For half-month periods, create 2 rows (P1 and P2)
+          rowNum++;
+          rows.push({
+            customer,
+            area,
+            contract,
+            rowNumber: rowNum,
+            isFirstInCustomer,
+            customerRowSpan: isFirstInCustomer ? totalRowsInCustomer : 0,
+            isFirstInContractGroup: false,
+            contractRowSpan: 1,
+            subPeriod: 1,
+            isFirstSubPeriod: true,
+          });
+          isFirstInCustomer = false;
+          
+          // P2 row (same rowNumber, no increment)
+          rows.push({
+            customer,
+            area,
+            contract,
+            rowNumber: rowNum, // Same row number as P1
+            isFirstInCustomer: false,
+            customerRowSpan: 0, // Will be handled by P1's rowSpan
+            isFirstInContractGroup: false,
+            contractRowSpan: 0, // Will be handled by P1's rowSpan
+            subPeriod: 2,
+            isFirstSubPeriod: false,
+          });
+        } else {
+          // Regular period - single row
+          rowNum++;
+          rows.push({
+            customer,
+            area,
+            contract,
+            rowNumber: rowNum,
+            isFirstInCustomer,
+            customerRowSpan: isFirstInCustomer ? totalRowsInCustomer : 0,
+            isFirstInContractGroup: false,
+            contractRowSpan: 1,
+            subPeriod: 0,
+            isFirstSubPeriod: true, // Always true for regular periods
+          });
+          isFirstInCustomer = false;
+        }
       });
     });
 
@@ -338,11 +383,14 @@ export function BAPPTable({
               <th className="sticky left-44 z-30 w-50 border-r bg-muted px-3 py-3 text-left font-medium">
                 NAMA KONTRAK
               </th>
-              <th className="sticky left-94 z-30 w-45 border-r bg-muted px-3 py-3 text-left font-medium">
+              <th className="sticky left-94 z-30 w-36 border-r bg-muted px-3 py-3 text-left font-medium">
                 AREA
               </th>
-              <th className="w-20 border-r bg-muted px-3 py-3 text-center font-medium">
+              <th className="w-24 border-l bg-muted px-2 py-3 text-center font-medium">
                 PERIODE
+              </th>
+              <th className="w-12 border-r bg-muted px-1 py-3 text-center font-medium text-[10px]">
+                
               </th>
               {MONTH_NAMES.map((month) => (
                 <th
@@ -362,16 +410,21 @@ export function BAPPTable({
           <tbody>
             {flattenedRows.map((row) => (
               <tr
-                key={row.contract.id + "-" + row.area.id}
+                key={row.contract.id + "-" + row.area.id + "-" + row.subPeriod}
                 className="border transition-colors hover:bg-muted/30"
               >
-                {/* Row number - sticky */}
-                <td className="sticky left-0 z-10 border-r bg-background px-3 py-2 text-center font-medium">
-                  {row.rowNumber}
-                </td>
+                {/* Row number - sticky (with rowSpan for half-month) */}
+                {row.isFirstSubPeriod && (
+                  <td 
+                    rowSpan={row.subPeriod === 1 ? 2 : 1}
+                    className="sticky left-0 z-10 border-r bg-background px-3 py-2 text-center font-medium align-middle"
+                  >
+                    {row.rowNumber}
+                  </td>
+                )}
 
                 {/* Customer name - sticky with rowspan */}
-                {row.isFirstInCustomer && (
+                {row.isFirstInCustomer && row.customerRowSpan > 0 && (
                   <td
                     rowSpan={row.customerRowSpan}
                     className="sticky left-0 z-10 border bg-background px-3 py-2 font-medium align-middle"
@@ -402,24 +455,48 @@ export function BAPPTable({
                   </td>
                 )}
 
-                {/* Area - sticky with fixed width */}
-                <td className="sticky left-0 z-10 w-45 border bg-background px-3 py-2 align-middle">
-                  <div className="w-40 wrap-break-word text-muted-foreground">
-                    {row.area.name}
-                  </div>
-                </td>
+                {/* Area - sticky with fixed width (with rowSpan for half-month) */}
+                {row.isFirstSubPeriod && (
+                  <td 
+                    rowSpan={row.subPeriod === 1 ? 2 : 1}
+                    className="sticky left-0 z-10 w-36 border bg-background px-3 py-2 align-middle"
+                  >
+                    <div className="w-32 wrap-break-word text-muted-foreground">
+                      {row.area.name}
+                    </div>
+                  </td>
+                )}
 
-                {/* Period */}
-                <td className="border-r px-3 py-2 text-center">
-                  <span className="text-muted-foreground">
-                    {row.contract.period}
-                  </span>
+                {/* Period - with rowSpan for half-month periods */}
+                {row.isFirstSubPeriod && (
+                  <td 
+                    rowSpan={row.subPeriod === 1 ? 2 : 1}
+                    className="px-2 py-2 text-center align-middle"
+                  >
+                    <span className="text-muted-foreground text-xs whitespace-nowrap">
+                      {row.contract.period}
+                    </span>
+                  </td>
+                )}
+
+                {/* Sub-period indicator (P1/P2) for half-month */}
+                  {row.subPeriod > 0 ? (
+                <td className="border px-1 py-2 text-center">
+                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded whitespace-nowrap ${
+                      row.subPeriod === 1 ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" : "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+                    }`}>
+                      P{row.subPeriod}
+                    </span>
                 </td>
+                  ): (
+                    <td className="border-r"></td>
+                  )} 
 
                 {/* Monthly progress cells with merged cell support */}
                 {(() => {
                   const periodValue = parsePeriodToNumber(row.contract.period);
-                  const activeMonths = getPeriodMonths(periodValue);
+                  const isHalfMonth = isHalfMonthPeriod(row.contract.period);
+                  const activeMonths = isHalfMonth ? Array.from({ length: 12 }, (_, i) => i + 1) : getPeriodMonths(periodValue);
                   const cells: React.ReactNode[] = [];
 
                   // Format timestamp helper
@@ -439,6 +516,160 @@ export function BAPPTable({
                     }
                   };
 
+                  // For half-month periods, render all 12 months (single row per sub_period)
+                  if (isHalfMonth) {
+                    const currentSubPeriod = row.subPeriod; // 1 for P1, 2 for P2
+                    
+                    for (let month = 1; month <= 12; month++) {
+                      // Get progress for the current sub_period only
+                      const progress = row.contract.monthly_progress.find(
+                        (p) => p.month === month && p.sub_period === currentSubPeriod
+                      );
+
+                      // Helper to render tooltip content
+                      const renderTooltipContent = (prog: typeof progress, periodLabel: string) => {
+                        if (!prog) {
+                          return (
+                            <div className="text-center">
+                              <p className="font-medium">{periodLabel} - {MONTH_NAMES[month - 1]}</p>
+                              <p className="text-muted-foreground">Belum ada data</p>
+                            </div>
+                          );
+                        }
+
+                        const status = prog.percentage === 100 ? "Selesai" : prog.percentage > 0 ? "Proses" : "Belum";
+                        const completedSigs = prog.signatures.filter(s => s.is_completed);
+
+                        return (
+                          <>
+                            {/* Progress & Status */}
+                            <div className="flex items-center justify-between gap-4 text-sm">
+                              <p className="font-medium">
+                                {prog.completed_items}/{prog.total_items} item selesai
+                              </p>
+                              <Badge variant="outline" className="text-xs text-white">
+                                {status}
+                              </Badge>
+                            </div>
+
+                            {/* Notes */}
+                            {prog.notes && (
+                              <div className="mt-2 border-t pt-2 overflow-clip">
+                                <p className="text-xs font-medium text-slate">Catatan:</p>
+                                <p className="text-sm text-wrap max-w-[95%]">{prog.notes}</p>
+                                {prog.notes_updated_at && (
+                                  <p className="mt-1 text-xs text-slate">
+                                    Diupdate: {formatTimestamp(prog.notes_updated_at)}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Upload Document Status */}
+                            <div className="mt-2 border-t pt-2">
+                              <p className="text-sm font-medium text-slate mb-1">Status Upload Dokumen:</p>
+                              <div className="flex items-center gap-2 text-xs">
+                                {prog.is_upload_completed ? (
+                                  <>
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">Sudah diupload</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle className="h-4 w-4 text-red-500" />
+                                    <span className="text-slate">Belum diupload</span>
+                                  </>
+                                )}
+                                {prog.upload_link && (
+                                  <a
+                                    href={prog.upload_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="ml-auto text-blue-500 hover:underline flex items-center gap-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <FileUp className="h-3 w-3" />
+                                    Lihat
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Signatures Status */}
+                            <div className="my-2 border-y py-2">
+                              <p className="text-sm font-medium text-slate mb-1">
+                                Status Tanda Tangan ({completedSigs.length}/{prog.signatures.length}):
+                              </p>
+                              <ul className="space-y-1">
+                                {prog.signatures.map((sig) => (
+                                  <li key={sig.id || sig.name} className="text-xs flex items-center gap-2">
+                                    {sig.is_completed ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                    ) : (
+                                      <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                                    )}
+                                    <span className={sig.is_completed ? "font-medium" : "text-slate"}>
+                                      {sig.name}
+                                    </span>
+                                    {sig.is_completed && sig.completed_at && (
+                                      <span className="text-slate text-xs ml-auto">
+                                        {formatTimestamp(sig.completed_at)}
+                                      </span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            {/* Last updated */}
+                            {prog.updated_at && (
+                              <p className="mt-2 text-xs text-slate">
+                                Update terakhir: {formatTimestamp(prog.updated_at)}
+                              </p>
+                            )}
+
+                            <p className="mt-1 text-xs text-muted-foreground text-center">
+                              Klik untuk detail
+                            </p>
+                          </>
+                        );
+                      };
+
+                      // Render single cell for this sub_period
+                      cells.push(
+                        <td key={month} className="border-r px-1 py-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => {
+                                  if (progress) {
+                                    handleProgressClick(progress, row.contract);
+                                  }
+                                }}
+                                className={`flex h-8 w-full items-center justify-center rounded text-xs font-medium transition-all hover:ring-2 hover:ring-primary/50 ${
+                                  progress 
+                                    ? getProgressColorClass(progress.percentage)
+                                    : "bg-muted/50 text-muted-foreground"
+                                }`}
+                              >
+                                {progress 
+                                  ? (showPercentage 
+                                      ? `${progress.percentage}%` 
+                                      : progress.percentage === 100 ? "✓" : progress.percentage > 0 ? "○" : "")
+                                  : ""}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-sm">
+                              {renderTooltipContent(progress, `Periode ${currentSubPeriod}`)}
+                            </TooltipContent>
+                          </Tooltip>
+                        </td>
+                      );
+                    }
+                    return cells;
+                  }
+
+                  // Regular period handling (existing logic)
                   // Track which months we've already rendered
                   let currentMonth = 1;
 
@@ -446,9 +677,9 @@ export function BAPPTable({
                     // Calculate colspan: from currentMonth to activeMonth
                     const colspan = activeMonth - currentMonth + 1;
 
-                    // Get progress for this active month
+                    // Get progress for this active month (sub_period = 1 for regular periods)
                     const progress = row.contract.monthly_progress.find(
-                      (p) => p.month === activeMonth
+                      (p) => p.month === activeMonth && p.sub_period === 1
                     );
 
                     if (!progress) {
@@ -626,9 +857,12 @@ export function BAPPTable({
                   return cells;
                 })()}
 
-                {/* Actions */}
-                {isAdmin && (
-                  <td className="px-2 py-2 text-center">
+                {/* Actions - with rowSpan for half-month periods */}
+                {isAdmin && row.isFirstSubPeriod && (
+                  <td 
+                    rowSpan={row.subPeriod === 1 ? 2 : 1}
+                    className="px-2 py-2 text-center align-middle"
+                  >
                     <div className="flex items-center justify-center gap-1">
                       <Tooltip>
                         <TooltipTrigger asChild>

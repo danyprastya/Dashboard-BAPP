@@ -38,7 +38,7 @@ import type {
   MonthlyProgressDetail,
   ContractWithProgress,
 } from "@/types/database";
-import { MONTH_NAMES_FULL } from "@/types/database";
+import { MONTH_NAMES_FULL, isHalfMonthPeriod } from "@/types/database";
 import { getProgressColorClass } from "@/lib/placeholder-data";
 import { EditProgressDialog } from "./edit-progress-dialog";
 import {
@@ -175,6 +175,9 @@ export function ProgressDialog({
                 </div>
                 <DialogDescription className="text-sm">
                   {contractName} - {MONTH_NAMES_FULL[progress.month - 1]}{" "}
+                  {contract && isHalfMonthPeriod(contract.period) && (
+                    <span className="font-medium">(Periode {progress.sub_period}) </span>
+                  )}
                   {progress.year}
                 </DialogDescription>
               </DialogHeader>
@@ -424,6 +427,7 @@ export function ProgressDialog({
           contract={contract}
           month={progress.month}
           year={year}
+          subPeriod={progress.sub_period}
           onSave={handleEditSave}
         />
       )}

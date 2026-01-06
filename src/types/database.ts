@@ -44,6 +44,7 @@ export interface MonthlyProgress {
   contract_id: string;
   month: number; // 1-12
   year: number;
+  sub_period: number; // 1 or 2 (for half-month periods)
   upload_link: string | null;
   is_upload_completed: boolean;
   notes: string | null; // Catatan untuk bulan ini
@@ -75,6 +76,7 @@ export interface MonthlyProgressDetail {
   id: string | null;
   month: number;
   year: number;
+  sub_period: number; // 1 or 2 (for half-month periods)
   signatures: SignatureDetail[];
   is_upload_completed: boolean;
   upload_link: string | null;
@@ -156,6 +158,7 @@ export const MONTH_NAMES_FULL = [
 
 // Period options for contracts
 export const PERIOD_OPTIONS = [
+  { value: 0.5, label: "Per 1/2 Bulan" },
   { value: 1, label: "Per 1 Bulan" },
   { value: 2, label: "Per 2 Bulan" },
   { value: 3, label: "Per 3 Bulan" },
@@ -168,17 +171,31 @@ export type PeriodValue = typeof PERIOD_OPTIONS[number]["value"];
 
 // Helper function to get period months (which months are active for a period)
 export function getPeriodMonths(periodValue: number): number[] {
+  // Handle half-month period - return all 12 months
+  if (periodValue === 0.5) {
+    return Array.from({ length: 12 }, (_, i) => i + 1);
+  }
+  
   const months: number[] = [];
   for (let i = periodValue; i <= 12; i += periodValue) {
-    months.push(i);
+    months.push(Math.round(i)); // Use Math.round to avoid floating point issues
   }
   return months;
 }
 
 // Helper function to parse period string to number
 export function parsePeriodToNumber(period: string): number {
+  // Handle "Per 1/2 Bulan" special case
+  if (period.includes("1/2")) {
+    return 0.5;
+  }
   const match = period.match(/\d+/);
   return match ? parseInt(match[0]) : 1;
+}
+
+// Helper function to check if period is half-monthly
+export function isHalfMonthPeriod(period: string): boolean {
+  return period.includes("1/2") || parsePeriodToNumber(period) === 0.5;
 }
 
 // Helper function to calculate percentage dynamically

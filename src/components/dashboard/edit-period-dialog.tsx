@@ -116,6 +116,11 @@ export function EditPeriodDialog({
     Record<number, number>
   >({});
 
+  // Configuration for half-month conversion
+  const [halfMonthMode, setHalfMonthMode] = useState<"duplicate" | "empty">(
+    "duplicate"
+  );
+
   // Get current period value from contract
   const currentPeriodValue = useMemo(() => {
     if (!contract) return 1;
@@ -143,7 +148,8 @@ export function EditPeriodDialog({
 
   // Determine conversion direction
   const isConvertingUp = selectedPeriod > currentPeriodValue;
-  const isConvertingDown = selectedPeriod < currentPeriodValue;
+  const isConvertingDown = selectedPeriod < currentPeriodValue && selectedPeriod !== 0.5;
+  const isConvertingToHalfMonth = selectedPeriod === 0.5 && currentPeriodValue !== 0.5;
 
   // Get months with data
   const monthsWithData = useMemo(() => {
@@ -312,6 +318,7 @@ export function EditPeriodDialog({
           contractId: contract.id,
           year: currentYear,
           newPeriod: selectedPeriod,
+          halfMonthMode: isConvertingToHalfMonth ? halfMonthMode : undefined,
         };
 
         // Configure merge (converting UP)
@@ -447,7 +454,7 @@ export function EditPeriodDialog({
                 <Label className="w-32 text-sm">Periode Baru:</Label>
                 <Select
                   value={selectedPeriod.toString()}
-                  onValueChange={(v) => setSelectedPeriod(parseInt(v))}
+                  onValueChange={(v) => setSelectedPeriod(parseFloat(v))}
                 >
                   <SelectTrigger className="w-48">
                     <SelectValue />
@@ -787,6 +794,51 @@ export function EditPeriodDialog({
                     )}
                   </div>
                 ))}
+            </div>
+          )}
+
+          {/* Half-Month Configuration */}
+          {isConvertingToHalfMonth && (
+            <div className="space-y-4 rounded-lg border p-4 bg-amber-50/50 dark:bg-amber-950/20">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <span className="font-medium text-sm">
+                  Konfigurasi Periode 1/2 Bulan
+                </span>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Setiap bulan akan memiliki 2 periode (P1 dan P2). Pilih bagaimana data dari periode sebelumnya akan diperlakukan:
+              </p>
+
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="halfmonth-duplicate"
+                    checked={halfMonthMode === "duplicate"}
+                    onCheckedChange={() => setHalfMonthMode("duplicate")}
+                  />
+                  <Label htmlFor="halfmonth-duplicate" className="text-sm">
+                    <span className="font-medium">Duplikasi ke P2</span>
+                    <span className="text-muted-foreground ml-1">
+                      - Data P1 akan diduplikasi ke P2
+                    </span>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="halfmonth-empty"
+                    checked={halfMonthMode === "empty"}
+                    onCheckedChange={() => setHalfMonthMode("empty")}
+                  />
+                  <Label htmlFor="halfmonth-empty" className="text-sm">
+                    <span className="font-medium">Kosongkan P2</span>
+                    <span className="text-muted-foreground ml-1">
+                      - Hanya P1 yang berisi data, P2 kosong
+                    </span>
+                  </Label>
+                </div>
+              </div>
             </div>
           )}
         </div>

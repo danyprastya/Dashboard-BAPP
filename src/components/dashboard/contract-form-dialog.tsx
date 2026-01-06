@@ -385,6 +385,7 @@ export function ContractFormDialog({
                 <SelectValue placeholder="Pilih periode kontrak" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="Per 1/2 Bulan">Per 1/2 Bulan</SelectItem>
                 <SelectItem value="Per 1 Bulan">Per 1 Bulan</SelectItem>
                 <SelectItem value="Per 2 Bulan">Per 2 Bulan</SelectItem>
                 <SelectItem value="Per 3 Bulan">Per 3 Bulan</SelectItem>

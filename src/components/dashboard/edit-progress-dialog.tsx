@@ -17,7 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Save, FileText, PenTool, StickyNote, CheckCircle, XCircle } from "lucide-react";
 import type { ContractWithProgress } from "@/types/database";
-import { MONTH_NAMES_FULL } from "@/types/database";
+import { MONTH_NAMES_FULL, isHalfMonthPeriod } from "@/types/database";
 import { updateMonthlyProgress } from "@/lib/supabase/data";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { showSuccessToast, showErrorToast } from "@/lib/toast";
@@ -29,6 +29,7 @@ interface EditProgressDialogProps {
   contract: ContractWithProgress;
   month: number;
   year: number;
+  subPeriod?: number;
   onSave: () => void;
 }
 
@@ -38,6 +39,7 @@ export function EditProgressDialog({
   contract,
   month,
   year,
+  subPeriod = 1,
   onSave,
 }: EditProgressDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
@@ -101,9 +103,9 @@ export function EditProgressDialog({
     };
   }, [uploadLink, isUploadCompleted, linkVerification?.canEmbed]);
 
-  // Get the progress for this month
+  // Get the progress for this month and sub_period
   const monthProgress = contract.monthly_progress.find(
-    (p) => p.month === month
+    (p) => p.month === month && p.sub_period === subPeriod
   );
 
   // Initialize form state when dialog opens
@@ -146,7 +148,8 @@ export function EditProgressDialog({
           uploadLink || null,
           isUploadCompleted,
           notes || null,
-          sigStatuses
+          sigStatuses,
+          subPeriod
         );
       } else {
         // Simulate delay for placeholder mode
@@ -184,7 +187,11 @@ export function EditProgressDialog({
         <DialogHeader className="shrink-0">
           <DialogTitle className="text-lg">Edit Progress</DialogTitle>
           <DialogDescription className="text-sm">
-            {contract.name} - {MONTH_NAMES_FULL[month - 1]} {year}
+            {contract.name} - {MONTH_NAMES_FULL[month - 1]}{" "}
+            {isHalfMonthPeriod(contract.period) && (
+              <span className="font-medium">(Periode {subPeriod}) </span>
+            )}
+            {year}
           </DialogDescription>
         </DialogHeader>
 
