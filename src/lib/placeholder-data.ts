@@ -39,6 +39,7 @@ function generateMonthlyProgress(
     id: null,
     month: monthIndex + 1,
     year: year,
+    sub_period: 1,
     signatures,
     is_upload_completed: isUploadCompleted,
     upload_link: isUploadCompleted ? "https://example.com/upload" : null,
