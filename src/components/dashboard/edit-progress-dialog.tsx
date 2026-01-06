@@ -305,7 +305,7 @@ export function EditProgressDialog({
                       ) : linkStatus === 'valid' ? (
                         <><CheckCircle className="h-3 w-3" /> Preview tersedia</>
                       ) : linkStatus === 'invalid' || linkVerification?.error ? (
-                        <><XCircle className="h-3 w-3" /> Preview tidak tersedia</>
+                        <></>
                       ) : null}
                     </span>
                   )}
@@ -316,7 +316,7 @@ export function EditProgressDialog({
                   value={uploadLink}
                   onChange={(e) => setUploadLink(e.target.value)}
                   disabled={!isUploadCompleted}
-                  className={linkStatus === 'invalid' || linkVerification?.error ? "border-destructive" : linkStatus === 'valid' ? "border-emerald-500" : ""}
+                  className={linkStatus === 'invalid' || linkVerification?.error ? "border-emerald-500" : linkStatus === 'valid' ? "border-emerald-500" : ""}
                 />
               </div>
             </div>

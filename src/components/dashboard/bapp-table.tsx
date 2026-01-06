@@ -380,10 +380,10 @@ export function BAPPTable({
               <th className="sticky left-12 z-30 w-32 border-r bg-muted px-3 py-3 text-left font-medium">
                 CUSTOMER
               </th>
-              <th className="sticky left-44 z-30 w-50 border-r bg-muted px-3 py-3 text-left font-medium">
+              <th className="sticky  z-30 w-50 border-r bg-muted px-3 py-3 text-left font-medium">
                 NAMA KONTRAK
               </th>
-              <th className="sticky left-94 z-30 w-36 border-r bg-muted px-3 py-3 text-left font-medium">
+              <th className="sticky z-30 w-36 border-r bg-muted px-3 py-3 text-left font-medium">
                 AREA
               </th>
               <th className="w-24 border-l bg-muted px-2 py-3 text-center font-medium">

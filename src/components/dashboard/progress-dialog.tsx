@@ -28,6 +28,7 @@ import {
   ChevronRight,
   Download,
   Loader2,
+  FolderOpen,
 } from "lucide-react";
 import {
   Tooltip,
@@ -115,16 +116,25 @@ export function ProgressDialog({
     onProgressUpdate?.();
   };
 
+  // Check if link is a folder
+  const isFolder =
+    fileInfo?.type === "google-folder" ||
+    fileInfo?.error?.code === "folder_link";
+
   // Can show preview if file is uploaded and has valid embed URL
   const canShowPreview =
     progress.is_upload_completed && fileInfo?.canEmbed && !fileInfo?.error;
+
+  // Show preview panel for both files and folders
+  const showPreviewPanel =
+    canShowPreview || (progress.is_upload_completed && isFolder);
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className={`${
-            showPreview && canShowPreview
+            showPreview && showPreviewPanel
               ? "min-w-[50vw] min-h-[60vh] max-w-5xl"
               : "max-w-2xl"
           } p-0 gap-0 overflow-hidden`}
@@ -133,7 +143,9 @@ export function ProgressDialog({
             {/* Left side - Detail Progress */}
             <div
               className={`${
-                showPreview && canShowPreview ? "w-1/2 border-r pt-10" : "w-full "
+                showPreview && showPreviewPanel
+                  ? "w-1/2 border-r pt-10"
+                  : "w-full "
               } p-6 overflow-y-auto max-h-[85vh]`}
             >
               <DialogHeader>
@@ -141,7 +153,7 @@ export function ProgressDialog({
                   <DialogTitle className="text-lg">Detail Progress</DialogTitle>
                   <div className="flex items-center gap-2">
                     {/* Preview Toggle Button */}
-                    {canShowPreview && (
+                    {showPreviewPanel && (
                       <Button
                         variant={showPreview ? "default" : "outline"}
                         size="icon"
@@ -176,7 +188,9 @@ export function ProgressDialog({
                 <DialogDescription className="text-sm">
                   {contractName} - {MONTH_NAMES_FULL[progress.month - 1]}{" "}
                   {contract && isHalfMonthPeriod(contract.period) && (
-                    <span className="font-medium">(Periode {progress.sub_period}) </span>
+                    <span className="font-medium">
+                      (Periode {progress.sub_period}){" "}
+                    </span>
                   )}
                   {progress.year}
                 </DialogDescription>
@@ -297,7 +311,10 @@ export function ProgressDialog({
                   {!progress.is_upload_completed && (
                     <div className="rounded-md border bg-muted/50 p-2 space-y-2">
                       <div className="flex items-center">
-                        <div className="flex items-center p-1 rounded-md" onClick={copyFilename}>
+                        <div
+                          className="flex items-center p-1 rounded-md"
+                          onClick={copyFilename}
+                        >
                           <Button
                             variant="default"
                             size="sm"
@@ -307,7 +324,7 @@ export function ProgressDialog({
                             }
                           >
                             <ExternalLink className="h-3 w-3" />
-                             Klik disini untuk upload file
+                            Klik disini untuk mengakses folder upload
                           </Button>
                         </div>
                       </div>
@@ -333,16 +350,26 @@ export function ProgressDialog({
                       </Button>
                       {showUploadInstructions && (
                         <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside pl-4">
-                          <li>Upload file ke folder <strong>Google Drive</strong> dari link diatas</li>
-                          <li><strong>Klik kanan → Get link → Anyone with link</strong></li>
-                          <li><strong>Copy link</strong> dan <strong>paste</strong> di Edit Progress</li>
+                          <li>
+                            Upload file ke folder <strong>Google Drive</strong>{" "}
+                            dari link diatas
+                          </li>
+                          <li>
+                            <strong>
+                              Klik kanan → Get link → Anyone with link
+                            </strong>
+                          </li>
+                          <li>
+                            <strong>Copy link</strong> dan{" "}
+                            <strong>paste</strong> di Edit Progress
+                          </li>
                         </ol>
                       )}
                     </div>
                   )}
 
-                  {/* Error for invalid links */}
-                  {fileInfo?.error && (
+                  {/* Error for invalid links - hide for folder links since we show folder placeholder */}
+                  {fileInfo?.error && !isFolder && (
                     <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2">
                       <div className="flex items-center gap-2">
                         <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
@@ -357,12 +384,14 @@ export function ProgressDialog({
             </div>
 
             {/* Right side - Preview Panel */}
-            {showPreview && canShowPreview && fileInfo?.previewUrl && (
+            {showPreview && showPreviewPanel && (
               <div className="w-1/2 flex flex-col min-h-[60vh] pt-7">
                 <div className="p-3 border-b bg-background flex items-center justify-between">
-                  <span className="text-lg font-medium">Preview Dokumen</span>
+                  <span className="text-lg font-medium">
+                    {isFolder ? "Link Folder" : "Preview Dokumen"}
+                  </span>
                   <div className="flex items-center gap-1">
-                    {fileInfo.downloadUrl && (
+                    {fileInfo?.downloadUrl && !isFolder && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -381,37 +410,73 @@ export function ProgressDialog({
                         </TooltipContent>
                       </Tooltip>
                     )}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() =>
-                            window.open(progress.upload_link!, "_blank")
-                          }
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <p>Buka di tab baru</p>
-                      </TooltipContent>
-                    </Tooltip>
+                    {!isFolder && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() =>
+                              window.open(progress.upload_link!, "_blank")
+                            }
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <p>Buka di tab baru</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </div>
                 </div>
                 <div className="flex-1 relative mb-6 border-b overflow-hidden">
-                  {previewLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  {isFolder ? (
+                    // Folder Placeholder
+                    <div className="w-full h-full min-h-[55vh] flex flex-col items-center justify-center bg-muted/30 p-8">
+                      <div className="rounded-full bg-muted p-6 mb-6">
+                        <FolderOpen className="h-16 w-16 text-muted-foreground" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-foreground mb-2">
+                        Link Mengarah ke Folder
+                      </h3>
+                      <p className="text-sm text-muted-foreground text-center max-w-xs mb-6">
+                        Link yang diupload mengarah ke folder Google Drive,
+                        bukan file dokumen.
+                      </p>
+                      <div className="flex flex-col items-center gap-3">
+                        <Button
+                          variant="default"
+                          onClick={() =>
+                            window.open(progress.upload_link!, "_blank")
+                          }
+                          className="gap-2 hover:cursor-pointer"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          Kunjungi Folder
+                        </Button>
+                        <p className="text-xs text-muted-foreground text-center">
+                          Tekan tombol di atas untuk melihat isi folder
+                        </p>
+                      </div>
                     </div>
+                  ) : (
+                    // File Preview
+                    <>
+                      {previewLoading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20">
+                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                      <iframe
+                        src={fileInfo?.previewUrl || ""}
+                        className="w-full h-full min-h-[55vh] border-0"
+                        onLoad={() => setPreviewLoading(false)}
+                        title="Document Preview"
+                      />
+                    </>
                   )}
-                    <iframe
-                      src={fileInfo.previewUrl}
-                      className="w-full h-full min-h-[55vh] border-0"
-                      onLoad={() => setPreviewLoading(false)}
-                      title="Document Preview"
-                    />
                 </div>
               </div>
             )}
