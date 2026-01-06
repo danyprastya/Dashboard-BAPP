@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -15,12 +15,13 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Save, FileText, PenTool, StickyNote } from "lucide-react";
+import { Loader2, Save, FileText, PenTool, StickyNote, CheckCircle, XCircle } from "lucide-react";
 import type { ContractWithProgress } from "@/types/database";
 import { MONTH_NAMES_FULL } from "@/types/database";
 import { updateMonthlyProgress } from "@/lib/supabase/data";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { showSuccessToast, showErrorToast } from "@/lib/toast";
+import { parseFileUrl, type FilePreviewInfo } from "@/lib/file-preview";
 
 interface EditProgressDialogProps {
   open: boolean;
@@ -46,6 +47,59 @@ export function EditProgressDialog({
   const [signatureStatuses, setSignatureStatuses] = useState<
     Record<string, boolean>
   >({});
+  
+  // Real link verification state: 'idle' | 'checking' | 'valid' | 'invalid'
+  const [linkStatus, setLinkStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+
+  // Verify link for preview availability (format check)
+  const linkVerification = useMemo((): FilePreviewInfo | null => {
+    if (!uploadLink || !uploadLink.trim()) return null;
+    return parseFileUrl(uploadLink);
+  }, [uploadLink]);
+
+  // Extract file ID from Google Drive URL
+  const extractFileId = (url: string): string | null => {
+    const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (fileMatch) return fileMatch[1];
+    const openMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (openMatch) return openMatch[1];
+    const docsMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (docsMatch) return docsMatch[1];
+    return null;
+  };
+
+  // Real verification: try to load thumbnail to check if file exists
+  useEffect(() => {
+    if (!uploadLink || !isUploadCompleted) {
+      setLinkStatus('idle');
+      return;
+    }
+
+    // Only verify Google Drive/Docs links
+    if (!linkVerification?.canEmbed) {
+      setLinkStatus('idle');
+      return;
+    }
+
+    const fileId = extractFileId(uploadLink);
+    if (!fileId) {
+      setLinkStatus('invalid');
+      return;
+    }
+
+    setLinkStatus('checking');
+
+    // Try to load thumbnail image to verify file exists
+    const img = new Image();
+    img.onload = () => setLinkStatus('valid');
+    img.onerror = () => setLinkStatus('invalid');
+    img.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w100`;
+
+    return () => {
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [uploadLink, isUploadCompleted, linkVerification?.canEmbed]);
 
   // Get the progress for this month
   const monthProgress = contract.monthly_progress.find(
@@ -229,13 +283,33 @@ export function EditProgressDialog({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="upload-link">Link Dokumen</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="upload-link">Link Dokumen</Label>
+                  {/* Inline verification status */}
+                  {isUploadCompleted && uploadLink && (
+                    <span className={`text-xs flex items-center gap-1 ${
+                      linkStatus === 'checking' ? 'text-muted-foreground' :
+                      linkStatus === 'valid' ? 'text-emerald-600' :
+                      linkStatus === 'invalid' || linkVerification?.error ? 'text-destructive' :
+                      'text-muted-foreground'
+                    }`}>
+                      {linkStatus === 'checking' ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" /> Memeriksa...</>
+                      ) : linkStatus === 'valid' ? (
+                        <><CheckCircle className="h-3 w-3" /> Preview tersedia</>
+                      ) : linkStatus === 'invalid' || linkVerification?.error ? (
+                        <><XCircle className="h-3 w-3" /> Preview tidak tersedia</>
+                      ) : null}
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="upload-link"
-                  placeholder="https://..."
+                  placeholder="https://drive.google.com/file/d/.../view"
                   value={uploadLink}
                   onChange={(e) => setUploadLink(e.target.value)}
                   disabled={!isUploadCompleted}
+                  className={linkStatus === 'invalid' || linkVerification?.error ? "border-destructive" : linkStatus === 'valid' ? "border-emerald-500" : ""}
                 />
               </div>
             </div>
