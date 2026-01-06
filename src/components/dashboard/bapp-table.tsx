@@ -48,8 +48,10 @@ import {
   CheckCircle2,
   XCircle,
   FileUp,
+  Zap,
 } from "lucide-react";
 import { EditContractDialog } from "./edit-contract-dialog";
+import { BatchOperationsDialog } from "./batch-operations";
 
 interface BAPPTableProps {
   data: CustomerWithAreas[];
@@ -84,6 +86,15 @@ export function BAPPTable({
     useState<ContractWithProgress | null>(null);
   const [editCustomerName, setEditCustomerName] = useState("");
   const [editAreaName, setEditAreaName] = useState("");
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
+  const [batchContract, setBatchContract] =
+    useState<ContractWithProgress | null>(null);
+
+  // Handler for opening batch operations dialog
+  const handleBatchClick = (contract: ContractWithProgress) => {
+    setBatchContract(contract);
+    setBatchDialogOpen(true);
+  };
 
   // Handler for opening edit contract dialog
   const handleEditClick = (
@@ -163,8 +174,8 @@ export function BAPPTable({
     isFirstInContractGroup: boolean;
     contractRowSpan: number;
     // For half-month periods
-    subPeriod: number; // 1 for P1, 2 for P2, 0 for regular periods
-    isFirstSubPeriod: boolean; // true if this is P1 (first sub-period row)
+    subPeriod: number; // 1 for 1-20, 2 for 21-30, 0 for regular periods
+    isFirstSubPeriod: boolean; // true if this is 1-20 (first sub-period row)
   };
 
   const flattenedRows = useMemo(() => {
@@ -190,17 +201,20 @@ export function BAPPTable({
       );
 
       // Calculate total rows for this customer (considering half-month periods have 2 rows)
-      const totalRowsInCustomer = allContractsInCustomer.reduce((total, { contract }) => {
-        return total + (isHalfMonthPeriod(contract.period) ? 2 : 1);
-      }, 0);
-      
+      const totalRowsInCustomer = allContractsInCustomer.reduce(
+        (total, { contract }) => {
+          return total + (isHalfMonthPeriod(contract.period) ? 2 : 1);
+        },
+        0
+      );
+
       let isFirstInCustomer = true;
 
       allContractsInCustomer.forEach(({ area, contract }) => {
         const isHalfMonth = isHalfMonthPeriod(contract.period);
-        
+
         if (isHalfMonth) {
-          // For half-month periods, create 2 rows (P1 and P2)
+          // For half-month periods, create 2 rows (1-20 and 21-30)
           rowNum++;
           rows.push({
             customer,
@@ -215,17 +229,17 @@ export function BAPPTable({
             isFirstSubPeriod: true,
           });
           isFirstInCustomer = false;
-          
-          // P2 row (same rowNumber, no increment)
+
+          // 21-30 row (same rowNumber, no increment)
           rows.push({
             customer,
             area,
             contract,
-            rowNumber: rowNum, // Same row number as P1
+            rowNumber: rowNum, // Same row number as 1-20
             isFirstInCustomer: false,
-            customerRowSpan: 0, // Will be handled by P1's rowSpan
+            customerRowSpan: 0, // Will be handled by 1-20's rowSpan
             isFirstInContractGroup: false,
-            contractRowSpan: 0, // Will be handled by P1's rowSpan
+            contractRowSpan: 0, // Will be handled by 1-20's rowSpan
             subPeriod: 2,
             isFirstSubPeriod: false,
           });
@@ -389,9 +403,7 @@ export function BAPPTable({
               <th className="w-24 border-l bg-muted px-2 py-3 text-center font-medium">
                 PERIODE
               </th>
-              <th className="w-12 border-r bg-muted px-1 py-3 text-center font-medium text-[10px]">
-                
-              </th>
+              <th className="w-12 border-r bg-muted px-1 py-3 text-center font-medium text-[10px]"></th>
               {MONTH_NAMES.map((month) => (
                 <th
                   key={month}
@@ -415,7 +427,7 @@ export function BAPPTable({
               >
                 {/* Row number - sticky (with rowSpan for half-month) */}
                 {row.isFirstSubPeriod && (
-                  <td 
+                  <td
                     rowSpan={row.subPeriod === 1 ? 2 : 1}
                     className="sticky left-0 z-10 border-r bg-background px-3 py-2 text-center font-medium align-middle"
                   >
@@ -457,7 +469,7 @@ export function BAPPTable({
 
                 {/* Area - sticky with fixed width (with rowSpan for half-month) */}
                 {row.isFirstSubPeriod && (
-                  <td 
+                  <td
                     rowSpan={row.subPeriod === 1 ? 2 : 1}
                     className="sticky left-0 z-10 w-36 border bg-background px-3 py-2 align-middle"
                   >
@@ -469,7 +481,7 @@ export function BAPPTable({
 
                 {/* Period - with rowSpan for half-month periods */}
                 {row.isFirstSubPeriod && (
-                  <td 
+                  <td
                     rowSpan={row.subPeriod === 1 ? 2 : 1}
                     className="px-2 py-2 text-center align-middle"
                   >
@@ -479,24 +491,32 @@ export function BAPPTable({
                   </td>
                 )}
 
-                {/* Sub-period indicator (P1/P2) for half-month */}
-                  {row.subPeriod > 0 ? (
-                <td className="border px-1 py-2 text-center">
-                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded whitespace-nowrap ${
-                      row.subPeriod === 1 ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" : "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
-                    }`}>
-                      P{row.subPeriod}
-                    </span>
-                </td>
-                  ): (
-                    <td className="border-r"></td>
-                  )} 
+                {/* Sub-period indicator (1-20/21-30) for half-month */}
+                {row.subPeriod > 0 ? (
+                  <td className="border px-1 py-2 text-center">
+                    <div className=" justify-start h-full flex items-center">
+                      <span
+                        className={`text-xs font-medium px-1.5 py-0.5 w-full rounded whitespace-nowrap ${
+                          row.subPeriod === 1
+                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                            : "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+                        }`}
+                      >
+                        E {row.subPeriod === 1 ? "1-20" : "21-30"}
+                      </span>
+                    </div>
+                  </td>
+                ) : (
+                  <td className="border-r"></td>
+                )}
 
                 {/* Monthly progress cells with merged cell support */}
                 {(() => {
                   const periodValue = parsePeriodToNumber(row.contract.period);
                   const isHalfMonth = isHalfMonthPeriod(row.contract.period);
-                  const activeMonths = isHalfMonth ? Array.from({ length: 12 }, (_, i) => i + 1) : getPeriodMonths(periodValue);
+                  const activeMonths = isHalfMonth
+                    ? Array.from({ length: 12 }, (_, i) => i + 1)
+                    : getPeriodMonths(periodValue);
                   const cells: React.ReactNode[] = [];
 
                   // Format timestamp helper
@@ -518,36 +538,55 @@ export function BAPPTable({
 
                   // For half-month periods, render all 12 months (single row per sub_period)
                   if (isHalfMonth) {
-                    const currentSubPeriod = row.subPeriod; // 1 for P1, 2 for P2
-                    
+                    const currentSubPeriod = row.subPeriod; // 1 for 1-20, 2 for 21-30
+
                     for (let month = 1; month <= 12; month++) {
                       // Get progress for the current sub_period only
                       const progress = row.contract.monthly_progress.find(
-                        (p) => p.month === month && p.sub_period === currentSubPeriod
+                        (p) =>
+                          p.month === month && p.sub_period === currentSubPeriod
                       );
 
                       // Helper to render tooltip content
-                      const renderTooltipContent = (prog: typeof progress, periodLabel: string) => {
+                      const renderTooltipContent = (
+                        prog: typeof progress,
+                        periodLabel: string
+                      ) => {
                         if (!prog) {
                           return (
                             <div className="text-center">
-                              <p className="font-medium">{periodLabel} - {MONTH_NAMES[month - 1]}</p>
-                              <p className="text-muted-foreground">Belum ada data</p>
+                              <p className="font-medium">
+                                {periodLabel} - {MONTH_NAMES[month - 1]}
+                              </p>
+                              <p className="text-muted-foreground">
+                                Belum ada data
+                              </p>
                             </div>
                           );
                         }
 
-                        const status = prog.percentage === 100 ? "Selesai" : prog.percentage > 0 ? "Proses" : "Belum";
-                        const completedSigs = prog.signatures.filter(s => s.is_completed);
+                        const status =
+                          prog.percentage === 100
+                            ? "Selesai"
+                            : prog.percentage > 0
+                            ? "Proses"
+                            : "Belum";
+                        const completedSigs = prog.signatures.filter(
+                          (s) => s.is_completed
+                        );
 
                         return (
                           <>
                             {/* Progress & Status */}
                             <div className="flex items-center justify-between gap-4 text-sm">
                               <p className="font-medium">
-                                {prog.completed_items}/{prog.total_items} item selesai
+                                {prog.completed_items}/{prog.total_items} item
+                                selesai
                               </p>
-                              <Badge variant="outline" className="text-xs text-white">
+                              <Badge
+                                variant="outline"
+                                className="text-xs text-white"
+                              >
                                 {status}
                               </Badge>
                             </div>
@@ -555,11 +594,16 @@ export function BAPPTable({
                             {/* Notes */}
                             {prog.notes && (
                               <div className="mt-2 border-t pt-2 overflow-clip">
-                                <p className="text-xs font-medium text-slate">Catatan:</p>
-                                <p className="text-sm text-wrap max-w-[95%]">{prog.notes}</p>
+                                <p className="text-xs font-medium text-slate">
+                                  Catatan:
+                                </p>
+                                <p className="text-sm text-wrap max-w-[95%]">
+                                  {prog.notes}
+                                </p>
                                 {prog.notes_updated_at && (
                                   <p className="mt-1 text-xs text-slate">
-                                    Diupdate: {formatTimestamp(prog.notes_updated_at)}
+                                    Diupdate:{" "}
+                                    {formatTimestamp(prog.notes_updated_at)}
                                   </p>
                                 )}
                               </div>
@@ -567,17 +611,23 @@ export function BAPPTable({
 
                             {/* Upload Document Status */}
                             <div className="mt-2 border-t pt-2">
-                              <p className="text-sm font-medium text-slate mb-1">Status Upload Dokumen:</p>
+                              <p className="text-sm font-medium text-slate mb-1">
+                                Status Upload Dokumen:
+                              </p>
                               <div className="flex items-center gap-2 text-xs">
                                 {prog.is_upload_completed ? (
                                   <>
                                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">Sudah diupload</span>
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                      Sudah diupload
+                                    </span>
                                   </>
                                 ) : (
                                   <>
                                     <XCircle className="h-4 w-4 text-red-500" />
-                                    <span className="text-slate">Belum diupload</span>
+                                    <span className="text-slate">
+                                      Belum diupload
+                                    </span>
                                   </>
                                 )}
                                 {prog.upload_link && (
@@ -598,17 +648,27 @@ export function BAPPTable({
                             {/* Signatures Status */}
                             <div className="my-2 border-y py-2">
                               <p className="text-sm font-medium text-slate mb-1">
-                                Status Tanda Tangan ({completedSigs.length}/{prog.signatures.length}):
+                                Status Tanda Tangan ({completedSigs.length}/
+                                {prog.signatures.length}):
                               </p>
                               <ul className="space-y-1">
                                 {prog.signatures.map((sig) => (
-                                  <li key={sig.id || sig.name} className="text-xs flex items-center gap-2">
+                                  <li
+                                    key={sig.id || sig.name}
+                                    className="text-xs flex items-center gap-2"
+                                  >
                                     {sig.is_completed ? (
                                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                                     ) : (
                                       <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
                                     )}
-                                    <span className={sig.is_completed ? "font-medium" : "text-slate"}>
+                                    <span
+                                      className={
+                                        sig.is_completed
+                                          ? "font-medium"
+                                          : "text-slate"
+                                      }
+                                    >
                                       {sig.name}
                                     </span>
                                     {sig.is_completed && sig.completed_at && (
@@ -624,7 +684,8 @@ export function BAPPTable({
                             {/* Last updated */}
                             {prog.updated_at && (
                               <p className="mt-2 text-xs text-slate">
-                                Update terakhir: {formatTimestamp(prog.updated_at)}
+                                Update terakhir:{" "}
+                                {formatTimestamp(prog.updated_at)}
                               </p>
                             )}
 
@@ -647,20 +708,27 @@ export function BAPPTable({
                                   }
                                 }}
                                 className={`flex h-8 w-full items-center justify-center rounded text-xs font-medium transition-all hover:ring-2 hover:ring-primary/50 ${
-                                  progress 
+                                  progress
                                     ? getProgressColorClass(progress.percentage)
                                     : "bg-muted/50 text-muted-foreground"
                                 }`}
                               >
-                                {progress 
-                                  ? (showPercentage 
-                                      ? `${progress.percentage}%` 
-                                      : progress.percentage === 100 ? "✓" : progress.percentage > 0 ? "○" : "")
+                                {progress
+                                  ? showPercentage
+                                    ? `${progress.percentage}%`
+                                    : progress.percentage === 100
+                                    ? "✓"
+                                    : progress.percentage > 0
+                                    ? "○"
+                                    : ""
                                   : ""}
                               </button>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-sm">
-                              {renderTooltipContent(progress, `Periode ${currentSubPeriod}`)}
+                              {renderTooltipContent(
+                                progress,
+                                `Periode ${currentSubPeriod}`
+                              )}
                             </TooltipContent>
                           </Tooltip>
                         </td>
@@ -752,7 +820,9 @@ export function BAPPTable({
                                 <p className="text-xs font-medium text-slate">
                                   Catatan:
                                 </p>
-                                <p className="text-sm text-wrap max-w-[95%]">{progress.notes}</p>
+                                <p className="text-sm text-wrap max-w-[95%]">
+                                  {progress.notes}
+                                </p>
                                 {progress.notes_updated_at && (
                                   <p className="mt-1 text-xs text-slate">
                                     Diupdate:{" "}
@@ -859,11 +929,26 @@ export function BAPPTable({
 
                 {/* Actions - with rowSpan for half-month periods */}
                 {isAdmin && row.isFirstSubPeriod && (
-                  <td 
+                  <td
                     rowSpan={row.subPeriod === 1 ? 2 : 1}
                     className="px-2 py-2 text-center align-middle"
                   >
                     <div className="flex items-center justify-center gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-amber-500"
+                            onClick={() => handleBatchClick(row.contract)}
+                          >
+                            <Zap className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Operasi batch</p>
+                        </TooltipContent>
+                      </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -930,6 +1015,17 @@ export function BAPPTable({
         areaName={editAreaName}
         onSave={() => onProgressUpdate?.()}
       />
+
+      {/* Batch Operations Dialog */}
+      {batchContract && (
+        <BatchOperationsDialog
+          open={batchDialogOpen}
+          onOpenChange={setBatchDialogOpen}
+          contract={batchContract}
+          year={year}
+          onComplete={() => onProgressUpdate?.()}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

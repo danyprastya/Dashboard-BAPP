@@ -23,6 +23,7 @@ import {
 import { useRouter } from "next/navigation";
 import { SettingsDialog } from "./settings-dialog";
 import { LogViewerDialog } from "./log-viewer-dialog";
+import { NotificationBell, NotificationSidebar } from "./notification-sidebar";
 
 export function DashboardHeader() {
   const { user, signOut, isPlaceholderMode } = useAuth();
@@ -58,7 +59,10 @@ export function DashboardHeader() {
             )}
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            {/* Notification Bell */}
+            <NotificationBell />
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -116,6 +120,9 @@ export function DashboardHeader() {
 
       {/* Log Viewer Dialog */}
       <LogViewerDialog open={showLogViewer} onOpenChange={setShowLogViewer} />
+
+      {/* Notification Sidebar */}
+      <NotificationSidebar />
     </>
   );
 }

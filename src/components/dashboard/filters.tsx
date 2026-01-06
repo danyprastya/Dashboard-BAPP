@@ -94,9 +94,9 @@ export function DashboardFiltersBar({
         )}
       </div>
 
-      <div className="flex flex-row gap-4 flex-wrap">
+      <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 sm:gap-4 sm:flex-wrap">
         {/* Search */}
-        <div className="relative sm:col-span-2 lg:col-span-1">
+        <div className="relative col-span-2">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Cari kontrak..."
@@ -111,7 +111,7 @@ export function DashboardFiltersBar({
           value={filters.year.toString()}
           onValueChange={handleYearChange}
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full sm:w-auto">
             <SelectValue placeholder="Pilih Tahun" />
           </SelectTrigger>
           <SelectContent>
@@ -128,7 +128,7 @@ export function DashboardFiltersBar({
           value={filters.customer_id || "all"}
           onValueChange={handleCustomerChange}
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full sm:w-auto">
             <SelectValue placeholder="Semua Customer" />
           </SelectTrigger>
           <SelectContent>
@@ -143,7 +143,7 @@ export function DashboardFiltersBar({
 
         {/* Status */}
         <Select value={filters.status} onValueChange={handleStatusChange}>
-          <SelectTrigger>
+          <SelectTrigger className="col-span-2 sm:col-span-1 w-full sm:w-auto">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>

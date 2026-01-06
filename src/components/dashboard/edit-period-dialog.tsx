@@ -148,8 +148,10 @@ export function EditPeriodDialog({
 
   // Determine conversion direction
   const isConvertingUp = selectedPeriod > currentPeriodValue;
-  const isConvertingDown = selectedPeriod < currentPeriodValue && selectedPeriod !== 0.5;
-  const isConvertingToHalfMonth = selectedPeriod === 0.5 && currentPeriodValue !== 0.5;
+  const isConvertingDown =
+    selectedPeriod < currentPeriodValue && selectedPeriod !== 0.5;
+  const isConvertingToHalfMonth =
+    selectedPeriod === 0.5 && currentPeriodValue !== 0.5;
 
   // Get months with data
   const monthsWithData = useMemo(() => {
@@ -808,7 +810,8 @@ export function EditPeriodDialog({
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Setiap bulan akan memiliki 2 periode (P1 dan P2). Pilih bagaimana data dari periode sebelumnya akan diperlakukan:
+                Setiap bulan akan memiliki 2 periode (1-20 dan 21-30). Pilih
+                bagaimana data dari periode sebelumnya akan diperlakukan:
               </p>
 
               <div className="space-y-2">
@@ -819,9 +822,9 @@ export function EditPeriodDialog({
                     onCheckedChange={() => setHalfMonthMode("duplicate")}
                   />
                   <Label htmlFor="halfmonth-duplicate" className="text-sm">
-                    <span className="font-medium">Duplikasi ke P2</span>
+                    <span className="font-medium">Duplikasi ke 21-30</span>
                     <span className="text-muted-foreground ml-1">
-                      - Data P1 akan diduplikasi ke P2
+                      - Data 1-20 akan diduplikasi ke 21-30
                     </span>
                   </Label>
                 </div>
@@ -832,9 +835,9 @@ export function EditPeriodDialog({
                     onCheckedChange={() => setHalfMonthMode("empty")}
                   />
                   <Label htmlFor="halfmonth-empty" className="text-sm">
-                    <span className="font-medium">Kosongkan P2</span>
+                    <span className="font-medium">Kosongkan 21-30</span>
                     <span className="text-muted-foreground ml-1">
-                      - Hanya P1 yang berisi data, P2 kosong
+                      - Hanya 1-20 yang berisi data, 21-30 kosong
                     </span>
                   </Label>
                 </div>

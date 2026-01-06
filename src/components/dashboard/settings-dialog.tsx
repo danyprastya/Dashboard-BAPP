@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -37,10 +38,19 @@ import {
   Clock,
   FileText,
   Info,
+  Mail,
+  Plus,
+  X,
 } from "lucide-react";
 import { useSettings } from "@/components/providers/settings-provider";
 import { showSuccessToast, showInfoToast } from "@/lib/toast";
 import { clearLogs, getLogs } from "@/lib/logger";
+import {
+  getEmailSettings,
+  saveEmailSettings,
+  type EmailNotificationSettings,
+  defaultEmailSettings,
+} from "@/lib/notifications";
 import type { AppSettings } from "@/lib/settings";
 
 interface SettingsDialogProps {
@@ -59,12 +69,21 @@ export function SettingsDialog({
   const [hasChanges, setHasChanges] = useState(false);
   const [logCount, setLogCount] = useState(0);
 
+  // Email notification settings
+  const [emailSettings, setEmailSettings] =
+    useState<EmailNotificationSettings>(defaultEmailSettings);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
+
   // Sync local settings when dialog opens or settings change
   useEffect(() => {
     if (open && isLoaded) {
       setLocalSettings(settings);
+      setEmailSettings(getEmailSettings());
       setHasChanges(false);
       setLogCount(getLogs().length);
+      setNewEmail("");
+      setEmailError("");
     }
   }, [open, isLoaded, settings]);
 
@@ -76,8 +95,49 @@ export function SettingsDialog({
     setHasChanges(true);
   };
 
+  const updateEmailSetting = <K extends keyof EmailNotificationSettings>(
+    key: K,
+    value: EmailNotificationSettings[K]
+  ) => {
+    setEmailSettings((prev) => ({ ...prev, [key]: value }));
+    setHasChanges(true);
+  };
+
+  const addEmailRecipient = () => {
+    setEmailError("");
+    const email = newEmail.trim().toLowerCase();
+
+    // Validate email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailError("Format email tidak valid");
+      return;
+    }
+
+    if (emailSettings.recipients.includes(email)) {
+      setEmailError("Email sudah ada dalam daftar");
+      return;
+    }
+
+    setEmailSettings((prev) => ({
+      ...prev,
+      recipients: [...prev.recipients, email],
+    }));
+    setNewEmail("");
+    setHasChanges(true);
+  };
+
+  const removeEmailRecipient = (email: string) => {
+    setEmailSettings((prev) => ({
+      ...prev,
+      recipients: prev.recipients.filter((e) => e !== email),
+    }));
+    setHasChanges(true);
+  };
+
   const handleSave = () => {
     updateSettings(localSettings);
+    saveEmailSettings(emailSettings);
     setHasChanges(false);
     showSuccessToast("Pengaturan berhasil disimpan", { force: true });
   };
@@ -93,6 +153,8 @@ export function SettingsDialog({
     };
     resetSettings();
     setLocalSettings(defaultSettings);
+    setEmailSettings(defaultEmailSettings);
+    saveEmailSettings(defaultEmailSettings);
     setHasChanges(false);
     showInfoToast("Pengaturan dikembalikan ke default", { force: true });
   };
@@ -268,6 +330,183 @@ export function SettingsDialog({
                   }
                 />
               </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Email Notification Section */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Mail className="h-4 w-4" />
+              Notifikasi Email
+            </div>
+
+            <div className="space-y-4 pl-6">
+              {/* Enable Email Notifications */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="email-notifications"
+                    className="flex items-center gap-2"
+                  >
+                    {emailSettings.enabled ? (
+                      <Mail className="h-4 w-4 text-emerald-500" />
+                    ) : (
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    Aktifkan Notifikasi Email
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Kirim notifikasi ke email untuk deadline dan progress
+                  </p>
+                </div>
+                <Switch
+                  id="email-notifications"
+                  checked={emailSettings.enabled}
+                  onCheckedChange={(v) => updateEmailSetting("enabled", v)}
+                />
+              </div>
+
+              {emailSettings.enabled && (
+                <>
+                  {/* Email Recipients */}
+                  <div className="space-y-2">
+                    <Label className="text-sm">Daftar Penerima</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="email"
+                        placeholder="email@contoh.com"
+                        value={newEmail}
+                        onChange={(e) => {
+                          setNewEmail(e.target.value);
+                          setEmailError("");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addEmailRecipient();
+                          }
+                        }}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={addEmailRecipient}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {emailError && (
+                      <p className="text-xs text-destructive">{emailError}</p>
+                    )}
+                    {emailSettings.recipients.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {emailSettings.recipients.map((email) => (
+                          <Badge
+                            key={email}
+                            variant="secondary"
+                            className="pr-1 flex items-center gap-1"
+                          >
+                            {email}
+                            <button
+                              type="button"
+                              onClick={() => removeEmailRecipient(email)}
+                              className="ml-1 hover:bg-destructive/20 rounded p-0.5"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Belum ada email penerima
+                      </p>
+                    )}
+                  </div>
+
+                  <Separator className="my-2" />
+
+                  {/* Email Options */}
+                  <div className="space-y-3">
+                    {/* Deadline Warnings */}
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm">Peringatan Deadline</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Ingatkan sebelum deadline kontrak
+                        </p>
+                      </div>
+                      <Switch
+                        checked={emailSettings.sendDeadlineWarnings}
+                        onCheckedChange={(v) =>
+                          updateEmailSetting("sendDeadlineWarnings", v)
+                        }
+                      />
+                    </div>
+
+                    {emailSettings.sendDeadlineWarnings && (
+                      <div className="flex items-center justify-between rounded-lg bg-muted p-3">
+                        <Label className="text-sm">Ingatkan</Label>
+                        <Select
+                          value={emailSettings.deadlineWarningDays.toString()}
+                          onValueChange={(v) =>
+                            updateEmailSetting(
+                              "deadlineWarningDays",
+                              parseInt(v)
+                            )
+                          }
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="3">3 hari</SelectItem>
+                            <SelectItem value="7">7 hari</SelectItem>
+                            <SelectItem value="14">14 hari</SelectItem>
+                            <SelectItem value="30">30 hari</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {/* Weekly Summary */}
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm">Ringkasan Mingguan</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Kirim laporan progress setiap minggu
+                        </p>
+                      </div>
+                      <Switch
+                        checked={emailSettings.sendWeeklySummary}
+                        onCheckedChange={(v) =>
+                          updateEmailSetting("sendWeeklySummary", v)
+                        }
+                      />
+                    </div>
+
+                    {/* Progress Alerts */}
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm">Alert Progress</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Notifikasi saat kontrak selesai atau bermasalah
+                        </p>
+                      </div>
+                      <Switch
+                        checked={emailSettings.sendProgressAlerts}
+                        onCheckedChange={(v) =>
+                          updateEmailSetting("sendProgressAlerts", v)
+                        }
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

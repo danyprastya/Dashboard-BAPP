@@ -28,15 +28,26 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { ImportYearDialog } from "./import-year-dialog";
+import { ExportDialog } from "./export-dialog";
 import { logger } from "@/lib/logger";
+import {
+  useKeyboardShortcuts,
+  KeyboardShortcutsDialog,
+  SHORTCUTS,
+  ShortcutHint,
+} from "@/lib/keyboard-shortcuts";
+import { useNotifications } from "@/components/providers/notification-provider";
 
 export function DashboardContent() {
   const { loading: authLoading, isPlaceholderMode, user } = useAuth();
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
+  const { setIsOpen: setNotificationSidebarOpen } = useNotifications();
   const [data, setData] = useState<CustomerWithAreas[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showContractDialog, setShowContractDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [filters, setFilters] = useState<DashboardFilters>({
     year: new Date().getFullYear(),
@@ -128,6 +139,54 @@ export function DashboardContent() {
     return () => clearInterval(intervalId);
   }, [settings.autoRefresh, settings.refreshInterval, authLoading, loadData]);
 
+  // Keyboard shortcuts handler
+  const handleShortcutAction = useCallback(
+    (action: string) => {
+      switch (action) {
+        case "SEARCH_FOCUS":
+          // Focus search input
+          const searchInput = document.querySelector(
+            'input[placeholder*="Cari"]'
+          ) as HTMLInputElement;
+          searchInput?.focus();
+          break;
+        case "NEW_CONTRACT":
+          setShowContractDialog(true);
+          break;
+        case "EXPORT":
+          setShowExportDialog(true);
+          break;
+        case "REFRESH":
+          loadData();
+          break;
+        case "TOGGLE_THEME":
+          const nextTheme =
+            settings.theme === "light"
+              ? "dark"
+              : settings.theme === "dark"
+              ? "system"
+              : "light";
+          updateSettings({ theme: nextTheme });
+          break;
+        case "SHOW_SHORTCUTS":
+          setShowShortcutsDialog(true);
+          break;
+        case "SHOW_NOTIFICATIONS":
+          setNotificationSidebarOpen(true);
+          break;
+        case "PREV_YEAR":
+          setFilters((prev) => ({ ...prev, year: prev.year - 1 }));
+          break;
+        case "NEXT_YEAR":
+          setFilters((prev) => ({ ...prev, year: prev.year + 1 }));
+          break;
+      }
+    },
+    [loadData, settings.theme, updateSettings, setNotificationSidebarOpen]
+  );
+
+  useKeyboardShortcuts({ onAction: handleShortcutAction });
+
   // Handle progress update (refresh data)
   const handleProgressUpdate = () => {
     loadData();
@@ -194,17 +253,18 @@ export function DashboardContent() {
       <DashboardHeader />
 
       <main className="container mx-auto px-4 mt-5 sm:px-6 lg:px-8">
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Page Title */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
                 Monitoring Kontrak BAPP
               </h1>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <span>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span className="hidden sm:inline">
                   Pantau progress kontrak BAPP untuk semua customer dan daerah
                 </span>
+                <span className="sm:hidden">Progress kontrak BAPP</span>
                 {settings.autoRefresh && (
                   <span className="flex items-center gap-1 text-xs bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full">
                     <RefreshCw className="h-3 w-3 animate-spin" />
@@ -213,56 +273,81 @@ export function DashboardContent() {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
-                onClick={() => setShowImportDialog(true)}
+                size="sm"
+                onClick={() => setShowExportDialog(true)}
+                title="Ctrl+E"
+                className="flex-1 sm:flex-none"
               >
                 <Download className="mr-2 h-4 w-4" />
-                Import Tahun
+                <span className="hidden sm:inline">Export</span>
+                <ShortcutHint shortcut={SHORTCUTS.EXPORT} />
               </Button>
-              <Button onClick={() => setShowContractDialog(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowImportDialog(true)}
+                className="flex-1 sm:flex-none"
+              >
                 <Plus className="mr-2 h-4 w-4" />
-                Tambah Kontrak
+                <span className="hidden sm:inline">Import Tahun</span>
+                <span className="sm:hidden">Import</span>
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setShowContractDialog(true)}
+                title="Ctrl+N"
+                className="flex-1 sm:flex-none"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">Tambah Kontrak</span>
+                <span className="sm:hidden">Tambah</span>
+                <ShortcutHint shortcut={SHORTCUTS.NEW_CONTRACT} />
               </Button>
             </div>
           </div>
 
           {/* Statistics Cards */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-[1rem] font-medium">
+                <CardTitle className="text-xs sm:text-[1rem] font-medium">
                   Total Customer
                 </CardTitle>
-                <Building2 className="h-6 w-6 text-muted-foreground" />
+                <Building2 className="h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{stats.totalCustomers}</div>
+                <div className="text-2xl sm:text-3xl font-bold">
+                  {stats.totalCustomers}
+                </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-[1rem] font-medium">
+                <CardTitle className="text-xs sm:text-[1rem] font-medium">
                   Total Kontrak
                 </CardTitle>
-                <FileText className="h-6 w-6 text-muted-foreground" />
+                <FileText className="h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{stats.totalContracts}</div>
+                <div className="text-2xl sm:text-3xl font-bold">
+                  {stats.totalContracts}
+                </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-[1rem] font-medium">
+                <CardTitle className="text-xs sm:text-[1rem] font-medium">
                   Selesai
                 </CardTitle>
-                <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                <CheckCircle2 className="h-4 w-4 sm:h-6 sm:w-6 text-emerald-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-emerald-600">
+                <div className="text-2xl sm:text-3xl font-bold text-emerald-600">
                   {stats.completed}
                 </div>
               </CardContent>
@@ -270,27 +355,27 @@ export function DashboardContent() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-[1rem] font-medium">
+                <CardTitle className="text-xs sm:text-[1rem] font-medium">
                   Dalam Proses
                 </CardTitle>
-                <Clock className="h-6 w-6 text-amber-600" />
+                <Clock className="h-4 w-4 sm:h-6 sm:w-6 text-amber-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-amber-600">
+                <div className="text-2xl sm:text-3xl font-bold text-amber-600">
                   {stats.inProgress}
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="col-span-2 sm:col-span-1">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-[1rem] font-medium">
+                <CardTitle className="text-xs sm:text-[1rem] font-medium">
                   Belum Mulai
                 </CardTitle>
-                <AlertCircle className="h-6 w-6 text-neutral-500" />
+                <AlertCircle className="h-4 w-4 sm:h-6 sm:w-6 text-neutral-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-neutral-500">
+                <div className="text-2xl sm:text-3xl font-bold text-neutral-500">
                   {stats.notStarted}
                 </div>
               </CardContent>
@@ -299,9 +384,9 @@ export function DashboardContent() {
         </div>
 
         {/* Filter Section */}
-        <div className="my-4">
+        <div className="my-3 sm:my-4">
           <Card className="shadow-sm">
-            <CardContent className="pt-6">
+            <CardContent className="pt-4 sm:pt-6 pb-4">
               <DashboardFiltersBar
                 filters={filters}
                 onFiltersChange={setFilters}
@@ -313,7 +398,7 @@ export function DashboardContent() {
 
         {/* BAPP Table */}
         <div>
-          <div className="h-[calc(100vh-280px)] min-h-96 rounded-lg border shadow-sm overflow-auto isolate">
+          <div className="h-[calc(100vh-320px)] sm:h-[calc(100vh-280px)] min-h-64 sm:min-h-96 rounded-lg border shadow-sm overflow-auto isolate">
             <BAPPTable
               data={data}
               filters={filters}
@@ -339,6 +424,20 @@ export function DashboardContent() {
           onOpenChange={setShowImportDialog}
           currentYear={filters.year}
           onImportComplete={loadData}
+        />
+
+        {/* Export Dialog */}
+        <ExportDialog
+          open={showExportDialog}
+          onOpenChange={setShowExportDialog}
+          data={data}
+          year={filters.year}
+        />
+
+        {/* Keyboard Shortcuts Dialog */}
+        <KeyboardShortcutsDialog
+          open={showShortcutsDialog}
+          onOpenChange={setShowShortcutsDialog}
         />
       </main>
     </div>
