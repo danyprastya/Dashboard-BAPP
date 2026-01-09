@@ -1214,82 +1214,116 @@ export async function importContractsFromYear(
   sourceYear: number,
   targetYear: number,
   contractIds: string[]
-): Promise<{ success: number; failed: number; errors: string[] }> {
+): Promise<{ success: number; failed: number; skipped: number; errors: string[]; skippedNames: string[] }> {
   const supabase = createClient();
-  if (!supabase) return { success: 0, failed: 0, errors: ["Database connection failed"] };
+  if (!supabase) return { success: 0, failed: 0, skipped: 0, errors: ["Database connection failed"], skippedNames: [] };
 
-  const result = { success: 0, failed: 0, errors: [] as string[] };
+  const result = { success: 0, failed: 0, skipped: 0, errors: [] as string[], skippedNames: [] as string[] };
 
-  for (const contractId of contractIds) {
-    try {
-      // Fetch the source contract with all related data
-      const { data: sourceContract, error: fetchError } = await supabase
-        .from("bapp_contracts")
-        .select(`
-          *,
-          signatures(*)
-        `)
-        .eq("id", contractId)
-        .single();
+  // Process in batches to avoid rate limiting
+  const BATCH_SIZE = 5;
+  const DELAY_BETWEEN_BATCHES = 500; // ms
 
-      if (fetchError || !sourceContract) {
+  for (let i = 0; i < contractIds.length; i += BATCH_SIZE) {
+    const batch = contractIds.slice(i, i + BATCH_SIZE);
+    
+    // Process batch concurrently
+    const batchResults = await Promise.allSettled(
+      batch.map(async (contractId) => {
+        // Fetch the source contract with all related data
+        const { data: sourceContract, error: fetchError } = await supabase
+          .from("bapp_contracts")
+          .select(`
+            *,
+            signatures(*)
+          `)
+          .eq("id", contractId)
+          .single();
+
+        if (fetchError || !sourceContract) {
+          throw new Error(`Gagal mengambil data: ${fetchError?.message || "Not found"}`);
+        }
+
+        const contractName = sourceContract.name || contractId;
+
+        // Check if contract already exists for target year (same customer + area + name + invoice_type)
+        const { data: existingContract } = await supabase
+          .from("bapp_contracts")
+          .select("id")
+          .eq("customer_id", sourceContract.customer_id)
+          .eq("area_id", sourceContract.area_id)
+          .eq("name", sourceContract.name)
+          .eq("invoice_type", sourceContract.invoice_type)
+          .eq("year", targetYear)
+          .maybeSingle();
+
+        if (existingContract) {
+          // Return special marker for skipped contracts
+          return { status: "skipped", name: contractName };
+        }
+
+        // Create new contract for target year
+        const { data: newContract, error: createError } = await supabase
+          .from("bapp_contracts")
+          .insert({
+            customer_id: sourceContract.customer_id,
+            area_id: sourceContract.area_id,
+            name: sourceContract.name,
+            period: sourceContract.period,
+            invoice_type: sourceContract.invoice_type,
+            notes: sourceContract.notes,
+            year: targetYear,
+          })
+          .select()
+          .single();
+
+        if (createError || !newContract) {
+          throw new Error(`Gagal membuat kontrak "${contractName}": ${createError?.message}`);
+        }
+
+        // Copy signatures (without progress)
+        const signatures = sourceContract.signatures || [];
+        if (signatures.length > 0) {
+          const signatureInserts = signatures.map((sig: { name: string; role: string; order: number }) => ({
+            contract_id: newContract.id,
+            name: sig.name,
+            role: sig.role,
+            order: sig.order,
+          }));
+
+          const { error: sigError } = await supabase
+            .from("signatures")
+            .insert(signatureInserts);
+
+          if (sigError) {
+            // Contract created but signatures failed - log but don't fail completely
+            console.warn(`Signatures failed for ${contractName}:`, sigError);
+          }
+        }
+
+        return { status: "success", name: contractName };
+      })
+    );
+
+    // Process batch results
+    for (const batchResult of batchResults) {
+      if (batchResult.status === "fulfilled") {
+        const value = batchResult.value as { status: string; name: string };
+        if (value.status === "skipped") {
+          result.skipped++;
+          result.skippedNames.push(value.name);
+        } else {
+          result.success++;
+        }
+      } else {
         result.failed++;
-        result.errors.push(`Contract ${contractId}: ${fetchError?.message || "Not found"}`);
-        continue;
+        result.errors.push(batchResult.reason?.message || "Unknown error");
       }
+    }
 
-      // Check if contract already exists for target year (same customer + name + invoice_type)
-      const { data: existingContract } = await supabase
-        .from("bapp_contracts")
-        .select("id")
-        .eq("customer_id", sourceContract.customer_id)
-        .eq("name", sourceContract.name)
-        .eq("invoice_type", sourceContract.invoice_type)
-        .eq("year", targetYear)
-        .single();
-
-      if (existingContract) {
-        result.failed++;
-        result.errors.push(`Contract already exists for ${targetYear}`);
-        continue;
-      }
-
-      // Create new contract for target year
-      const { data: newContract, error: createError } = await supabase
-        .from("bapp_contracts")
-        .insert({
-          customer_id: sourceContract.customer_id,
-          area_id: sourceContract.area_id,
-          name: sourceContract.name,
-          period: sourceContract.period,
-          invoice_type: sourceContract.invoice_type,
-          notes: sourceContract.notes,
-          year: targetYear,
-        })
-        .select()
-        .single();
-
-      if (createError || !newContract) {
-        result.failed++;
-        result.errors.push(`Failed to create contract: ${createError?.message}`);
-        continue;
-      }
-
-      // Copy signatures (without progress)
-      const signatures = sourceContract.signatures || [];
-      for (const sig of signatures) {
-        await supabase.from("signatures").insert({
-          contract_id: newContract.id,
-          name: sig.name,
-          role: sig.role,
-          order: sig.order,
-        });
-      }
-
-      result.success++;
-    } catch (err) {
-      result.failed++;
-      result.errors.push(`Contract ${contractId}: ${err instanceof Error ? err.message : "Unknown error"}`);
+    // Delay between batches to avoid rate limiting
+    if (i + BATCH_SIZE < contractIds.length) {
+      await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
     }
   }
 
@@ -1297,6 +1331,12 @@ export async function importContractsFromYear(
     logger.success(
       `Import kontrak berhasil`,
       `${result.success} kontrak diimport dari ${sourceYear} ke ${targetYear}`
+    );
+  }
+  if (result.skipped > 0) {
+    logger.info(
+      `Beberapa kontrak dilewati`,
+      `${result.skipped} kontrak sudah ada di tahun ${targetYear}`
     );
   }
   if (result.failed > 0) {

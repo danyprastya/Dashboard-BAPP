@@ -30,11 +30,9 @@ import {
   Download,
   Loader2,
   CheckSquare,
-  Trash2,
+  Square,
   AlertCircle,
-  Search,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 
 interface ImportYearDialogProps {
   open: boolean;
@@ -56,7 +54,6 @@ export function ImportYearDialog({
   );
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   // Generate year options (last 5 years excluding current)
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 1 - i);
@@ -73,20 +70,8 @@ export function ImportYearDialog({
     if (!open) {
       setSelectedContracts(new Set());
       setContracts([]);
-      setSearchQuery("");
     }
   }, [open]);
-
-  // Filter contracts based on search query
-  const filteredContracts = contracts.filter((contract) => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      contract.name.toLowerCase().includes(query) ||
-      contract.customerName.toLowerCase().includes(query) ||
-      (contract.areaName && contract.areaName.toLowerCase().includes(query))
-    );
-  });
 
   const loadContracts = async () => {
     setLoading(true);
@@ -113,7 +98,7 @@ export function ImportYearDialog({
   };
 
   const selectAll = () => {
-    setSelectedContracts(new Set(filteredContracts.map((c) => c.id)));
+    setSelectedContracts(new Set(contracts.map((c) => c.id)));
   };
 
   const selectNone = () => {
@@ -134,20 +119,41 @@ export function ImportYearDialog({
         Array.from(selectedContracts)
       );
 
+      // Build result message
+      const messages: string[] = [];
+      
       if (result.success > 0) {
-        showSuccessToast(
-          `${result.success} kontrak berhasil diimport ke tahun ${currentYear}`
+        messages.push(`${result.success} kontrak berhasil diimport`);
+      }
+      
+      if (result.skipped > 0) {
+        messages.push(`${result.skipped} kontrak dilewati (sudah ada)`);
+      }
+
+      // Show appropriate toast based on results
+      if (result.success > 0 && result.failed === 0) {
+        const successMsg = result.skipped > 0
+          ? `${result.success} kontrak berhasil diimport, ${result.skipped} dilewati (sudah ada)`
+          : `${result.success} kontrak berhasil diimport ke tahun ${currentYear}`;
+        showSuccessToast(successMsg);
+        onImportComplete();
+        onOpenChange(false);
+      } else if (result.success === 0 && result.skipped > 0 && result.failed === 0) {
+        // All selected contracts already exist
+        showInfoToast(`Semua ${result.skipped} kontrak yang dipilih sudah ada di tahun ${currentYear}`);
+      } else if (result.success > 0 && result.failed > 0) {
+        // Some success, some failed
+        showSuccessToast(`${result.success} kontrak berhasil diimport`);
+        showErrorToast(
+          `${result.failed} kontrak gagal: ${result.errors.slice(0, 3).join(", ")}`,
+          "Sebagian Gagal"
         );
         onImportComplete();
         onOpenChange(false);
-      }
-
-      if (result.failed > 0) {
+      } else if (result.failed > 0) {
         showErrorToast(
-          `${result.failed} kontrak gagal diimport: ${result.errors
-            .slice(0, 3)
-            .join(", ")}`,
-          "Sebagian Gagal"
+          `${result.failed} kontrak gagal diimport: ${result.errors.slice(0, 3).join(", ")}`,
+          "Import Gagal"
         );
       }
     } catch (error) {
@@ -193,42 +199,29 @@ export function ImportYearDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 flex-1 min-h-0">
-          {/* Year Selector and Search */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex items-center gap-2">
-              <Label className="whitespace-nowrap text-sm">Tahun:</Label>
-              <Select
-                value={sourceYear.toString()}
-                onValueChange={(v) => setSourceYear(parseInt(v))}
-              >
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {yearOptions.map((year) => (
-                    <SelectItem key={year} value={year.toString()}>
-                      {year}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span className="text-muted-foreground">→</span>
-              <Badge variant="secondary" className="text-sm">
-                {currentYear}
-              </Badge>
-            </div>
-
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Cari customer, kontrak, daerah..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
+        <div className="space-y-3 flex-1 min-h-0  overflow-hidden">
+          {/* Year Selector */}
+          <div className="flex items-center gap-4">
+            <Label className="whitespace-nowrap">Tahun Sumber:</Label>
+            <Select
+              value={sourceYear.toString()}
+              onValueChange={(v) => setSourceYear(parseInt(v))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((year) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-muted-foreground">→</span>
+            <Badge variant="secondary" className="text-sm">
+              {currentYear}
+            </Badge>
           </div>
 
           {/* Contract List */}
@@ -249,36 +242,24 @@ export function ImportYearDialog({
               {/* Selection Controls */}
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
-                  {selectedContracts.size} dari {filteredContracts.length}{" "}
-                  kontrak dipilih
-                  {searchQuery && ` (${contracts.length} total)`}
+                  {selectedContracts.size} dari {contracts.length} kontrak dipilih
                 </span>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={selectAll}>
                     <CheckSquare className="h-4 w-4 mr-1" />
                     Pilih Semua
                   </Button>
-                  {selectedContracts.size > 0 && (
-                    <Button variant="outline" size="sm" onClick={selectNone}>
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Hapus Pilihan
-                    </Button>
-                  )}
+                  <Button variant="outline" size="sm" onClick={selectNone}>
+                    <Square className="h-4 w-4 mr-1" />
+                    Hapus Pilihan
+                  </Button>
                 </div>
               </div>
 
               {/* Scrollable Contract List */}
-              <ScrollArea className="h-[400px] border rounded-md">
+              <ScrollArea className="h-[400px] border rounded-md  ">
                 <div className="p-3 space-y-2">
-                  {filteredContracts.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                      <Search className="h-6 w-6 mb-2" />
-                      <p className="text-sm">
-                        Tidak ada kontrak yang cocok dengan "{searchQuery}"
-                      </p>
-                    </div>
-                  ) : (
-                    filteredContracts.map((contract) => (
+                  {contracts.map((contract) => (
                       <label
                         key={contract.id}
                         className="flex items-center gap-4 p-4 rounded-lg border hover:bg-muted cursor-pointer transition-colors"
@@ -315,8 +296,7 @@ export function ImportYearDialog({
                           {contract.signatureCount} TTD
                         </Badge>
                       </label>
-                    ))
-                  )}
+                    ))}
                 </div>
               </ScrollArea>
             </>
@@ -324,7 +304,7 @@ export function ImportYearDialog({
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-2 pt-4 border-t">
+        <div className="flex justify-end gap-2 pt-3 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Batal
           </Button>
