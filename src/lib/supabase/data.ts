@@ -167,91 +167,130 @@ export async function fetchDashboardData(year: number): Promise<CustomerWithArea
   const supabase = createClient();
   if (!supabase) return [];
 
-  // Fetch all customers
-  const { data: customers, error: customersError } = await supabase
-    .from("customers")
-    .select("*")
-    .order("name");
+  // OPTIMIZED: Fetch all data in parallel using Promise.all
+  const [customersResult, areasResult, contractsResult] = await Promise.all([
+    supabase.from("customers").select("*").order("name"),
+    supabase.from("areas").select("*").order("code"),
+    supabase.from("bapp_contracts").select("*").eq("year", year).order("name"),
+  ]);
 
-  if (customersError) {
-    console.error("Error fetching customers:", customersError);
+  if (customersResult.error) {
+    console.error("Error fetching customers:", customersResult.error);
+    return [];
+  }
+  if (areasResult.error) {
+    console.error("Error fetching areas:", areasResult.error);
+    return [];
+  }
+  if (contractsResult.error) {
+    console.error("Error fetching contracts:", contractsResult.error);
     return [];
   }
 
-  // Fetch all areas
-  const { data: areas, error: areasError } = await supabase
-    .from("areas")
-    .select("*")
-    .order("code");
+  const customers = customersResult.data || [];
+  const areas = areasResult.data || [];
+  const contracts = contractsResult.data || [];
 
-  if (areasError) {
-    console.error("Error fetching areas:", areasError);
+  // Early return if no contracts
+  if (contracts.length === 0) {
     return [];
   }
 
-  // Fetch all contracts for the year
-  const { data: contracts, error: contractsError } = await supabase
-    .from("bapp_contracts")
-    .select("*")
-    .eq("year", year)
-    .order("name");
+  // OPTIMIZED: Batch fetch related data in parallel
+  const contractIds = contracts.map((c) => c.id);
+  
+  const [signaturesResult, monthlyProgressResult] = await Promise.all([
+    supabase
+      .from("signatures")
+      .select("*")
+      .in("contract_id", contractIds)
+      .order("order"),
+    supabase
+      .from("monthly_progress")
+      .select("*")
+      .in("contract_id", contractIds)
+      .eq("year", year),
+  ]);
 
-  if (contractsError) {
-    console.error("Error fetching contracts:", contractsError);
-    return [];
+  if (signaturesResult.error) {
+    console.error("Error fetching signatures:", signaturesResult.error);
+  }
+  if (monthlyProgressResult.error) {
+    console.error("Error fetching monthly progress:", monthlyProgressResult.error);
   }
 
-  // Fetch all signatures
-  const contractIds = contracts?.map((c) => c.id) || [];
-  const { data: signatures, error: signaturesError } = await supabase
-    .from("signatures")
-    .select("*")
-    .in("contract_id", contractIds.length > 0 ? contractIds : [""])
-    .order("order");
+  const signatures = signaturesResult.data || [];
+  const monthlyProgress = monthlyProgressResult.data || [];
 
-  if (signaturesError) {
-    console.error("Error fetching signatures:", signaturesError);
+  // OPTIMIZED: Fetch signature progress only if we have monthly progress
+  let signatureProgress: any[] = [];
+  if (monthlyProgress.length > 0) {
+    const progressIds = monthlyProgress.map((p) => p.id);
+    const sigProgressResult = await supabase
+      .from("signature_progress")
+      .select("*")
+      .in("monthly_progress_id", progressIds);
+
+    if (sigProgressResult.error) {
+      console.error("Error fetching signature progress:", sigProgressResult.error);
+    }
+    signatureProgress = sigProgressResult.data || [];
   }
 
-  // Fetch all monthly progress
-  const { data: monthlyProgress, error: progressError } = await supabase
-    .from("monthly_progress")
-    .select("*")
-    .in("contract_id", contractIds.length > 0 ? contractIds : [""])
-    .eq("year", year);
-
-  if (progressError) {
-    console.error("Error fetching monthly progress:", progressError);
+  // OPTIMIZED: Create lookup Maps for O(1) access instead of O(n) array.filter
+  const areasByCustomerId = new Map<string, typeof areas>();
+  for (const area of areas) {
+    if (!areasByCustomerId.has(area.customer_id)) {
+      areasByCustomerId.set(area.customer_id, []);
+    }
+    areasByCustomerId.get(area.customer_id)!.push(area);
   }
 
-  // Fetch all signature progress
-  const progressIds = monthlyProgress?.map((p) => p.id) || [];
-  const { data: signatureProgress, error: sigProgressError } = await supabase
-    .from("signature_progress")
-    .select("*")
-    .in("monthly_progress_id", progressIds.length > 0 ? progressIds : [""]);
-
-  if (sigProgressError) {
-    console.error("Error fetching signature progress:", sigProgressError);
+  const contractsByKey = new Map<string, typeof contracts>();
+  for (const contract of contracts) {
+    const key = `${contract.customer_id}_${contract.area_id}`;
+    if (!contractsByKey.has(key)) {
+      contractsByKey.set(key, []);
+    }
+    contractsByKey.get(key)!.push(contract);
   }
 
-  // Build the hierarchical data structure
-  const result: CustomerWithAreas[] = (customers || []).map((customer) => {
-    const customerAreas = (areas || []).filter(
-      (area) => area.customer_id === customer.id
-    );
+  const signaturesByContractId = new Map<string, typeof signatures>();
+  for (const sig of signatures) {
+    if (!signaturesByContractId.has(sig.contract_id)) {
+      signaturesByContractId.set(sig.contract_id, []);
+    }
+    signaturesByContractId.get(sig.contract_id)!.push(sig);
+  }
+
+  const progressByContractId = new Map<string, typeof monthlyProgress>();
+  for (const prog of monthlyProgress) {
+    if (!progressByContractId.has(prog.contract_id)) {
+      progressByContractId.set(prog.contract_id, []);
+    }
+    progressByContractId.get(prog.contract_id)!.push(prog);
+  }
+
+  const sigProgressByProgressId = new Map<string, typeof signatureProgress>();
+  for (const sp of signatureProgress) {
+    if (!sigProgressByProgressId.has(sp.monthly_progress_id)) {
+      sigProgressByProgressId.set(sp.monthly_progress_id, []);
+    }
+    sigProgressByProgressId.get(sp.monthly_progress_id)!.push(sp);
+  }
+
+  // Build the hierarchical data structure using Maps
+  const result: CustomerWithAreas[] = customers.map((customer) => {
+    const customerAreas = areasByCustomerId.get(customer.id) || [];
 
     const areasWithContracts = customerAreas.map((area) => {
-      const areaContracts = (contracts || []).filter(
-        (contract) =>
-          contract.customer_id === customer.id && contract.area_id === area.id
-      );
+      const key = `${customer.id}_${area.id}`;
+      const areaContracts = contractsByKey.get(key) || [];
 
       const contractsWithProgress: ContractWithProgress[] = areaContracts.map(
         (contract) => {
-          const contractSignatures = (signatures || []).filter(
-            (sig) => sig.contract_id === contract.id
-          );
+          const contractSignatures = signaturesByContractId.get(contract.id) || [];
+          const contractProgress = progressByContractId.get(contract.id) || [];
 
           // Check if this contract uses half-month periods
           const isHalfMonth = isHalfMonthPeriod(contract.period);
@@ -263,21 +302,20 @@ export async function fetchDashboardData(year: number): Promise<CustomerWithArea
             const subPeriods = isHalfMonth ? [1, 2] : [1];
             
             for (const subPeriod of subPeriods) {
-              const progress = (monthlyProgress || []).find(
-                (p) => p.contract_id === contract.id && 
-                       p.month === month && 
+              const progress = contractProgress.find(
+                (p) => p.month === month && 
                        (p.sub_period === subPeriod || (!isHalfMonth && (p.sub_period === 1 || p.sub_period === undefined)))
               );
 
+              const progressSigProgress = progress 
+                ? sigProgressByProgressId.get(progress.id) || []
+                : [];
+
               const signaturesWithStatus: SignatureDetail[] =
                 contractSignatures.map((sig) => {
-                  const sigProgress = progress
-                    ? (signatureProgress || []).find(
-                        (sp) =>
-                          sp.monthly_progress_id === progress.id &&
-                          sp.signature_id === sig.id
-                      )
-                    : null;
+                  const sigProgress = progressSigProgress.find(
+                    (sp) => sp.signature_id === sig.id
+                  );
 
                   return {
                     id: sig.id,
@@ -644,20 +682,24 @@ export async function updateContractSignatures(
     }
   }
 
-  // Update existing signatures (preserves signature_progress!)
-  for (const sig of toUpdate) {
-    const { error: updateError } = await supabase
-      .from("signatures")
-      .update({ name: sig.name, role: sig.role, order: sig.order })
-      .eq("id", sig.id);
-
-    if (updateError) {
-      console.error("Error updating signature:", updateError);
-      throw new Error(updateError.message);
+  // OPTIMIZED: Batch update existing signatures using Promise.all for parallel execution
+  if (toUpdate.length > 0) {
+    const updatePromises = toUpdate.map((sig) =>
+      supabase
+        .from("signatures")
+        .update({ name: sig.name, role: sig.role, order: sig.order })
+        .eq("id", sig.id)
+    );
+    
+    const results = await Promise.all(updatePromises);
+    const updateError = results.find((r) => r.error);
+    if (updateError?.error) {
+      console.error("Error updating signature:", updateError.error);
+      throw new Error(updateError.error.message);
     }
   }
 
-  // Create new signatures
+  // Create new signatures (already batched)
   if (toCreate.length > 0) {
     const { error: insertError } = await supabase
       .from("signatures")
@@ -738,34 +780,67 @@ export async function updateMonthlyProgress(
     throw new Error("Failed to create or update monthly progress");
   }
 
-  // Update signature statuses
-  for (const sigStatus of signatureStatuses) {
-    // Check if signature progress exists
-    const { data: existingSigProgress } = await supabase
-      .from("signature_progress")
-      .select("id")
-      .eq("monthly_progress_id", progress.id)
-      .eq("signature_id", sigStatus.signatureId)
-      .single();
+  // OPTIMIZED: Batch fetch existing signature progress in single query
+  const { data: existingSigProgress } = await supabase
+    .from("signature_progress")
+    .select("id, signature_id")
+    .eq("monthly_progress_id", progress.id);
 
-    if (existingSigProgress) {
-      // Update
-      await supabase
-        .from("signature_progress")
-        .update({
-          is_completed: sigStatus.isCompleted,
-          completed_at: sigStatus.isCompleted ? new Date().toISOString() : null,
-        })
-        .eq("id", existingSigProgress.id);
+  const existingSigMap = new Map(
+    (existingSigProgress || []).map((sp) => [sp.signature_id, sp.id])
+  );
+
+  // Separate into updates and inserts
+  const toUpdate: { id: string; is_completed: boolean; completed_at: string | null }[] = [];
+  const toInsert: { monthly_progress_id: string; signature_id: string; is_completed: boolean; completed_at: string | null }[] = [];
+
+  for (const sigStatus of signatureStatuses) {
+    const existingId = existingSigMap.get(sigStatus.signatureId);
+    const completedAt = sigStatus.isCompleted ? new Date().toISOString() : null;
+
+    if (existingId) {
+      toUpdate.push({
+        id: existingId,
+        is_completed: sigStatus.isCompleted,
+        completed_at: completedAt,
+      });
     } else {
-      // Insert
-      await supabase.from("signature_progress").insert({
+      toInsert.push({
         monthly_progress_id: progress.id,
         signature_id: sigStatus.signatureId,
         is_completed: sigStatus.isCompleted,
-        completed_at: sigStatus.isCompleted ? new Date().toISOString() : null,
+        completed_at: completedAt,
       });
     }
+  }
+
+  // OPTIMIZED: Batch insert new signature progress
+  if (toInsert.length > 0) {
+    const { error: insertError } = await supabase
+      .from("signature_progress")
+      .insert(toInsert);
+
+    if (insertError) {
+      console.error("Error inserting signature progress:", insertError);
+      throw new Error(insertError.message);
+    }
+  }
+
+  // OPTIMIZED: Batch update existing signature progress using upsert alternative
+  // Since Supabase doesn't support batch update with different values easily,
+  // we use Promise.all for parallel execution
+  if (toUpdate.length > 0) {
+    await Promise.all(
+      toUpdate.map((update) =>
+        supabase
+          .from("signature_progress")
+          .update({
+            is_completed: update.is_completed,
+            completed_at: update.completed_at,
+          })
+          .eq("id", update.id)
+      )
+    );
   }
   
   const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -877,14 +952,16 @@ export async function migrateContractPeriod(
             .delete()
             .eq("monthly_progress_id", targetProgress.id);
 
-          // Copy from source
-          for (const sigProgress of sourceProgress.signature_progress) {
-            await supabase.from("signature_progress").insert({
-              monthly_progress_id: targetProgress.id,
-              signature_id: sigProgress.signature_id,
-              is_completed: sigProgress.is_completed,
-              completed_at: sigProgress.completed_at,
-            });
+          // OPTIMIZED: Batch insert signature progress from source
+          const sigProgressInserts = sourceProgress.signature_progress.map((sigProgress: any) => ({
+            monthly_progress_id: targetProgress.id,
+            signature_id: sigProgress.signature_id,
+            is_completed: sigProgress.is_completed,
+            completed_at: sigProgress.completed_at,
+          }));
+
+          if (sigProgressInserts.length > 0) {
+            await supabase.from("signature_progress").insert(sigProgressInserts);
           }
         }
 
@@ -971,14 +1048,16 @@ export async function migrateContractPeriod(
               .delete()
               .eq("monthly_progress_id", targetProgress.id);
 
-            for (let i = 0; i < signatures.length; i++) {
-              const sig = signatures[i];
-              await supabase.from("signature_progress").insert({
-                monthly_progress_id: targetProgress.id,
-                signature_id: sig.id,
-                is_completed: i < completedSigs,
-                completed_at: i < completedSigs ? new Date().toISOString() : null,
-              });
+            // OPTIMIZED: Batch insert signature progress
+            const sigProgressInserts = signatures.map((sig, i) => ({
+              monthly_progress_id: targetProgress.id,
+              signature_id: sig.id,
+              is_completed: i < completedSigs,
+              completed_at: i < completedSigs ? new Date().toISOString() : null,
+            }));
+
+            if (sigProgressInserts.length > 0) {
+              await supabase.from("signature_progress").insert(sigProgressInserts);
             }
           }
         }
@@ -1120,15 +1199,17 @@ export async function migrateContractPeriod(
           .select()
           .single();
 
-        // Copy signature progress if duplicating
+        // OPTIMIZED: Batch insert signature progress if duplicating
         if (newP2Progress && shouldDuplicate && existingData.signature_progress) {
-          for (const sigProgress of existingData.signature_progress) {
-            await supabase.from("signature_progress").insert({
-              monthly_progress_id: newP2Progress.id,
-              signature_id: sigProgress.signature_id,
-              is_completed: sigProgress.is_completed,
-              completed_at: sigProgress.completed_at,
-            });
+          const sigProgressInserts = existingData.signature_progress.map((sigProgress: any) => ({
+            monthly_progress_id: newP2Progress.id,
+            signature_id: sigProgress.signature_id,
+            is_completed: sigProgress.is_completed,
+            completed_at: sigProgress.completed_at,
+          }));
+
+          if (sigProgressInserts.length > 0) {
+            await supabase.from("signature_progress").insert(sigProgressInserts);
           }
         }
       }
@@ -1168,35 +1249,29 @@ export async function fetchContractsForYear(year: number): Promise<ContractSumma
     return [];
   }
 
-  // Fetch customers and areas separately to avoid relationship issues
+  // OPTIMIZED: Fetch customers, areas, and signatures in parallel
   const customerIds = [...new Set(data.map(c => c.customer_id).filter(Boolean))];
   const areaIds = [...new Set(data.map(c => c.area_id).filter(Boolean))];
-
-  const { data: customers } = await supabase
-    .from("customers")
-    .select("id, name")
-    .in("id", customerIds);
-
-  const { data: areas } = await supabase
-    .from("areas")
-    .select("id, name")
-    .in("id", areaIds.length > 0 ? areaIds : ['none']);
-
-  // Count signatures per contract
   const contractIds = data.map(c => c.id);
-  const { data: signatures } = await supabase
-    .from("signatures")
-    .select("id, contract_id")
-    .in("contract_id", contractIds);
 
-  const customerMap = new Map((customers || []).map(c => [c.id, c.name]));
-  const areaMap = new Map((areas || []).map(a => [a.id, a.name]));
+  const [customersResult, areasResult, signaturesResult] = await Promise.all([
+    supabase.from("customers").select("id, name").in("id", customerIds),
+    supabase.from("areas").select("id, name").in("id", areaIds.length > 0 ? areaIds : ['none']),
+    supabase.from("signatures").select("id, contract_id").in("contract_id", contractIds),
+  ]);
+
+  const customers = customersResult.data || [];
+  const areas = areasResult.data || [];
+  const signatures = signaturesResult.data || [];
+
+  // OPTIMIZED: Use Map for O(1) lookup
+  const customerMap = new Map(customers.map(c => [c.id, c.name]));
+  const areaMap = new Map(areas.map(a => [a.id, a.name]));
   const signatureCount = new Map<string, number>();
   
-  (signatures || []).forEach(sig => {
-    const count = signatureCount.get(sig.contract_id) || 0;
-    signatureCount.set(sig.contract_id, count + 1);
-  });
+  for (const sig of signatures) {
+    signatureCount.set(sig.contract_id, (signatureCount.get(sig.contract_id) || 0) + 1);
+  }
 
   return data.map((contract) => ({
     id: contract.id,
