@@ -53,6 +53,8 @@ export function DashboardContent() {
     year: new Date().getFullYear(),
     search: "",
     customer_id: null,
+    area_name: null,
+    period: null,
     invoice_type: null,
     status: "all",
   });

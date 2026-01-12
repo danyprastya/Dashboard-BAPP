@@ -129,6 +129,8 @@ export interface DashboardFilters {
   year: number;
   search: string;
   customer_id: string | null;
+  area_name: string | null;
+  period: string | null;
   invoice_type: string | null;
   status: "all" | "completed" | "in_progress" | "not_started";
 }

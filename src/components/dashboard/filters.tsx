@@ -68,6 +68,22 @@ export function DashboardFiltersBar({
     onFiltersChange({
       ...filters,
       customer_id: value === "all" ? null : value,
+      // Reset area when customer changes
+      area_name: value === "all" ? null : filters.area_name,
+    });
+  };
+
+  const handleAreaChange = (value: string) => {
+    onFiltersChange({
+      ...filters,
+      area_name: value === "all" ? null : value,
+    });
+  };
+
+  const handlePeriodChange = (value: string) => {
+    onFiltersChange({
+      ...filters,
+      period: value === "all" ? null : value,
     });
   };
 
@@ -89,6 +105,8 @@ export function DashboardFiltersBar({
       year: currentYear,
       search: "",
       customer_id: null,
+      area_name: null,
+      period: null,
       invoice_type: null,
       status: "all",
     });
@@ -97,6 +115,8 @@ export function DashboardFiltersBar({
   const hasActiveFilters =
     filters.search ||
     filters.customer_id ||
+    filters.area_name ||
+    filters.period ||
     filters.invoice_type ||
     filters.status !== "all";
 
@@ -212,6 +232,56 @@ export function DashboardFiltersBar({
                 {customer.name}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+
+        {/* Area */}
+        <Select
+          value={filters.area_name || "all"}
+          onValueChange={handleAreaChange}
+        >
+          <SelectTrigger className="w-full sm:w-auto">
+            <SelectValue placeholder="Semua Area" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Area</SelectItem>
+            {/* Get unique area names from all customers or filtered customer */}
+            {Array.from(
+              new Set(
+                (filters.customer_id
+                  ? customers.filter((c) => c.id === filters.customer_id)
+                  : customers
+                )
+                  .flatMap((c) => c.areas || [])
+                  .map((area) => area.name)
+              )
+            )
+              .sort((a, b) => a.localeCompare(b))
+              .map((areaName) => (
+                <SelectItem key={areaName} value={areaName}>
+                  {areaName}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+
+        {/* Periode */}
+        <Select
+          value={filters.period || "all"}
+          onValueChange={handlePeriodChange}
+        >
+          <SelectTrigger className="w-full sm:w-auto">
+            <SelectValue placeholder="Semua Periode" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Periode</SelectItem>
+            <SelectItem value="Per 1/2 Bulan">Per 1/2 Bulan</SelectItem>
+            <SelectItem value="Per 1 Bulan">Per 1 Bulan</SelectItem>
+            <SelectItem value="Per 2 Bulan">Per 2 Bulan</SelectItem>
+            <SelectItem value="Per 3 Bulan">Per 3 Bulan</SelectItem>
+            <SelectItem value="Per 4 Bulan">Per 4 Bulan</SelectItem>
+            <SelectItem value="Per 6 Bulan">Per 6 Bulan</SelectItem>
+            <SelectItem value="Per 12 Bulan">Per 12 Bulan</SelectItem>
           </SelectContent>
         </Select>
 

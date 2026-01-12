@@ -119,6 +119,11 @@ export function BAPPTable({
 
         const filteredAreas = customer.areas
           .map((area) => {
+            // Filter by area name
+            if (filters.area_name && area.name !== filters.area_name) {
+              return { ...area, contracts: [] };
+            }
+
             const filteredContracts = area.contracts.filter((contract) => {
               // Filter by search
               if (
@@ -130,6 +135,11 @@ export function BAPPTable({
                   .toLowerCase()
                   .includes(filters.search.toLowerCase())
               ) {
+                return false;
+              }
+
+              // Filter by period
+              if (filters.period && contract.period !== filters.period) {
                 return false;
               }
 
