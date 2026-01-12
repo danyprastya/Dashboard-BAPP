@@ -170,7 +170,7 @@ export function ImportYearDialog({
           `${result.failed} kontrak gagal: ${result.errors.slice(0, 3).join(", ")}`,
           "Sebagian Gagal"
         );
-        onImportComplete();
+          onImportComplete();
         onOpenChange(false);
       } else if (result.failed > 0) {
         showErrorToast(
