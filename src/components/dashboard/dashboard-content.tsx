@@ -309,53 +309,56 @@ export function DashboardContent() {
             </div>
           </div>
 
-          {/* Statistics Cards */}
-          <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-xs sm:text-[1rem] font-medium">
-                  Total Customer
-                </CardTitle>
-                <Building2 className="h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl sm:text-3xl font-bold">
-                  {stats.totalCustomers}
-                </div>
-              </CardContent>
-            </Card>
+          {/* Statistics Cards & Filter Section */}
+          <div className="flex flex-col lg:flex-row gap-3 sm:gap-4">
+            {/* Statistics Cards */}
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:w-auto">
+              <Card className="w-full min-w-[200px]">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-xs sm:text-sm font-medium">
+                    Total Customer
+                  </CardTitle>
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">
+                    {stats.totalCustomers}
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-xs sm:text-[1rem] font-medium">
-                  Total Kontrak
-                </CardTitle>
-                <FileText className="h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl sm:text-3xl font-bold">
-                  {stats.totalContracts}
-                </div>
-              </CardContent>
-            </Card>
+              <Card className="w-full min-w-[200px]">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-xs sm:text-sm font-medium">
+                    Total Kontrak
+                  </CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">
+                    {stats.totalContracts}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Filter Section */}
+            <div className="flex-1 min-w-0">
+              <Card className="shadow-sm h-full">
+                <CardContent className="pt-4 sm:pt-6 pb-4">
+                  <DashboardFiltersBar
+                    filters={filters}
+                    onFiltersChange={setFilters}
+                    customers={data}
+                  />
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
 
-        {/* Filter Section */}
-        <div className="my-3 sm:my-4">
-          <Card className="shadow-sm">
-            <CardContent className="pt-4 sm:pt-6 pb-4">
-              <DashboardFiltersBar
-                filters={filters}
-                onFiltersChange={setFilters}
-                customers={data}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
         {/* BAPP Table */}
-        <div>
+        <div className="mt-6">
           <div className="h-[calc(100vh-320px)] sm:h-[calc(100vh-280px)] min-h-64 sm:min-h-96 rounded-lg border shadow-sm overflow-auto isolate">
             <BAPPTable
               data={data}

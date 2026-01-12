@@ -215,18 +215,20 @@ export function DashboardFiltersBar({
           </SelectContent>
         </Select>
 
-        {/* Status */}
-        <Select value={filters.status} onValueChange={handleStatusChange}>
-          <SelectTrigger className="col-span-2 sm:col-span-1 w-full sm:w-auto">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
-            <SelectItem value="completed">Selesai</SelectItem>
-            <SelectItem value="in_progress">Dalam Proses</SelectItem>
-            <SelectItem value="not_started">Belum Mulai</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Status (hidden) */}
+        <div className="hidden">
+          <Select value={filters.status} onValueChange={handleStatusChange}>
+            <SelectTrigger className="col-span-2 sm:col-span-1 w-full sm:w-auto">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Status</SelectItem>
+              <SelectItem value="completed">Selesai</SelectItem>
+              <SelectItem value="in_progress">Dalam Proses</SelectItem>
+              <SelectItem value="not_started">Belum Mulai</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </div>
   );
