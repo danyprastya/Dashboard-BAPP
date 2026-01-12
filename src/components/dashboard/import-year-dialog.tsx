@@ -10,12 +10,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -32,6 +30,9 @@ import {
   CheckSquare,
   Square,
   AlertCircle,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 interface ImportYearDialogProps {
@@ -54,9 +55,17 @@ export function ImportYearDialog({
   );
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [yearPickerOpen, setYearPickerOpen] = useState(false);
+  const [displayYearRange, setDisplayYearRange] = useState(currentYear - 1);
 
-  // Generate year options (last 5 years excluding current)
+  // Generate year options (last 5 years excluding current) - fallback
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 1 - i);
+  
+  // Generate years for popover (12 years in a grid)
+  const startYear = Math.floor(displayYearRange / 12) * 12;
+  const yearGrid = Array.from({ length: 12 }, (_, i) => startYear + i).filter(
+    (year) => year !== currentYear // Exclude current year
+  );
 
   // Fetch contracts when source year changes
   useEffect(() => {
@@ -103,6 +112,19 @@ export function ImportYearDialog({
 
   const selectNone = () => {
     setSelectedContracts(new Set());
+  };
+
+  const handleYearSelect = (year: number) => {
+    setSourceYear(year);
+    setYearPickerOpen(false);
+  };
+
+  const goToPreviousDecade = () => {
+    setDisplayYearRange(displayYearRange - 12);
+  };
+
+  const goToNextDecade = () => {
+    setDisplayYearRange(displayYearRange + 12);
   };
 
   const handleImport = async () => {
@@ -199,25 +221,73 @@ export function ImportYearDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 flex-1 min-h-0  overflow-hidden">
+        <div className="space-y-3 flex-1 min-h-0 overflow-hidden">
           {/* Year Selector */}
           <div className="flex items-center gap-4">
             <Label className="whitespace-nowrap">Tahun Sumber:</Label>
-            <Select
-              value={sourceYear.toString()}
-              onValueChange={(v) => setSourceYear(parseInt(v))}
-            >
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {yearOptions.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={yearPickerOpen} onOpenChange={setYearPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-auto justify-start text-left font-normal"
+                >
+                  <Calendar className="mr-2 h-4 w-4" />
+                  {sourceYear}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <div className="p-3">
+                  {/* Header with navigation */}
+                  <div className="flex items-center justify-between mb-3">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={goToPreviousDecade}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="text-sm font-medium">
+                      {startYear} - {startYear + 11}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={goToNextDecade}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  
+                  {/* Year grid */}
+                  <div className="grid grid-cols-4 gap-2">
+                    {yearGrid.map((year) => (
+                      <Button
+                        key={year}
+                        variant={sourceYear === year ? "default" : "outline"}
+                        className="h-9"
+                        onClick={() => handleYearSelect(year)}
+                      >
+                        {year}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {/* Quick action: Last year */}
+                  <div className="mt-3 pt-3 border-t">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => handleYearSelect(currentYear - 1)}
+                    >
+                      Tahun Lalu ({currentYear - 1})
+                    </Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
             <span className="text-muted-foreground">→</span>
             <Badge variant="secondary" className="text-sm">
               {currentYear}

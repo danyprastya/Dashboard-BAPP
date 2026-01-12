@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, X, Filter } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Search, X, Filter, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import type { DashboardFilters, CustomerWithAreas } from "@/types/database";
 
 // Install select component
@@ -27,8 +33,15 @@ export function DashboardFiltersBar({
   customers,
 }: DashboardFiltersProps) {
   const currentYear = new Date().getFullYear();
-  // Generate years: 2 years before to 2 years after current year
+  const [yearPickerOpen, setYearPickerOpen] = useState(false);
+  const [displayYearRange, setDisplayYearRange] = useState(currentYear);
+  
+  // Generate years: 2 years before to 2 years after current year (fallback untuk select biasa)
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+  
+  // Generate years for popover (12 years in a grid)
+  const startYear = Math.floor(displayYearRange / 12) * 12;
+  const yearGrid = Array.from({ length: 12 }, (_, i) => startYear + i);
 
   const handleSearchChange = (value: string) => {
     onFiltersChange({ ...filters, search: value });
@@ -36,6 +49,19 @@ export function DashboardFiltersBar({
 
   const handleYearChange = (value: string) => {
     onFiltersChange({ ...filters, year: parseInt(value) });
+  };
+
+  const handleYearSelect = (year: number) => {
+    onFiltersChange({ ...filters, year });
+    setYearPickerOpen(false);
+  };
+
+  const goToPreviousDecade = () => {
+    setDisplayYearRange(displayYearRange - 12);
+  };
+
+  const goToNextDecade = () => {
+    setDisplayYearRange(displayYearRange + 12);
   };
 
   const handleCustomerChange = (value: string) => {
@@ -106,22 +132,70 @@ export function DashboardFiltersBar({
           />
         </div>
 
-        {/* Year */}
-        <Select
-          value={filters.year.toString()}
-          onValueChange={handleYearChange}
-        >
-          <SelectTrigger className="w-full sm:w-auto">
-            <SelectValue placeholder="Pilih Tahun" />
-          </SelectTrigger>
-          <SelectContent>
-            {years.map((year) => (
-              <SelectItem key={year} value={year.toString()}>
-                {year}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Year Picker */}
+        <Popover open={yearPickerOpen} onOpenChange={setYearPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto justify-start text-left font-normal"
+            >
+              <Calendar className="mr-2 h-4 w-4" />
+              Tahun: {filters.year}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <div className="p-3">
+              {/* Header with navigation */}
+              <div className="flex items-center justify-between mb-3">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={goToPreviousDecade}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="text-sm font-medium">
+                  {startYear} - {startYear + 11}
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={goToNextDecade}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              {/* Year grid */}
+              <div className="grid grid-cols-4 gap-2">
+                {yearGrid.map((year) => (
+                  <Button
+                    key={year}
+                    variant={filters.year === year ? "default" : "outline"}
+                    className="h-9"
+                    onClick={() => handleYearSelect(year)}
+                  >
+                    {year}
+                  </Button>
+                ))}
+              </div>
+
+              {/* Quick action: Today */}
+              <div className="mt-3 pt-3 border-t">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => handleYearSelect(currentYear)}
+                >
+                  Tahun Ini ({currentYear})
+                </Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Customer */}
         <Select
