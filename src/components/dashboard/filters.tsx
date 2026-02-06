@@ -142,7 +142,7 @@ export function DashboardFiltersBar({
 
       <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 sm:gap-4 sm:flex-wrap">
         {/* Search */}
-        <div className="relative col-span-2">
+        <div className="relative col-span-2 w-[25vw]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Cari kontrak..."
