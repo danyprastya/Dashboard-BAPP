@@ -55,6 +55,8 @@ export function DashboardContent() {
     year: new Date().getFullYear(),
     search: "",
     customer_id: null,
+    area_name: null,
+    period: null,
     invoice_type: null,
     status: "all",
   });
@@ -346,21 +348,23 @@ export function DashboardContent() {
             </div>
           </div>
 
-          {/* Statistics Cards */}
-          <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-xs sm:text-[1rem] font-medium">
-                  Total Customer
-                </CardTitle>
-                <Building2 className="h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl sm:text-3xl font-bold">
-                  {stats.totalCustomers}
-                </div>
-              </CardContent>
-            </Card>
+          {/* Statistics Cards & Filter Section */}
+          <div className="flex flex-col lg:flex-row gap-3 sm:gap-4">
+            {/* Statistics Cards */}
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:w-auto">
+              <Card className="w-full min-w-[200px]">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-xs sm:text-sm font-medium">
+                    Total Customer
+                  </CardTitle>
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">
+                    {stats.totalCustomers}
+                  </div>
+                </CardContent>
+              </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
