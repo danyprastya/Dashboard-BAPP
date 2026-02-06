@@ -52,18 +52,61 @@ function generateMonthlyProgress(
   };
 }
 
-// Calculate yearly status based on monthly progress
+/**
+ * Determine expected number of progress entries per year based on contract period
+ * "Per 1 Bulan" → 12 entries/year (monthly)
+ * "Per 3 Bulan" → 4 entries/year (quarterly)  
+ * "Per 6 Bulan" → 2 entries/year (semi-annual)
+ * "Per 12 Bulan" → 1 entry/year (annual)
+ */
+function getExpectedEntriesPerYear(period: string): number {
+  const p = period.toLowerCase();
+  
+  if (p.includes("12 bulan") || p.includes("per 12")) {
+    return 1; // Annual
+  }
+  if (p.includes("6 bulan") || p.includes("per 6")) {
+    return 2; // Semi-annual
+  }
+  if (p.includes("3 bulan") || p.includes("per 3")) {
+    return 4; // Quarterly
+  }
+  // Default: monthly
+  return 12;
+}
+
+/**
+ * Calculate yearly status based on monthly progress
+ * A contract is "completed" when ALL expected progress entries are 100%
+ */
 export function calculateYearlyStatus(
   contract: ContractWithProgress
 ): "completed" | "in_progress" | "not_started" {
-  const allCompleted = contract.monthly_progress.every(
-    (m) => m.percentage === 100
-  );
-  const anyStarted = contract.monthly_progress.some((m) => m.percentage > 0);
-
-  if (allCompleted) return "completed";
-  if (anyStarted) return "in_progress";
-  return "not_started";
+  const progressEntries = contract.monthly_progress;
+  
+  if (progressEntries.length === 0) {
+    return "not_started";
+  }
+  
+  // Check if any entry has started (has any completed items)
+  const anyStarted = progressEntries.some((m) => m.completed_items > 0);
+  
+  if (!anyStarted) {
+    return "not_started";
+  }
+  
+  // Get expected number of entries based on period
+  const expectedEntries = getExpectedEntriesPerYear(contract.period);
+  
+  // Count how many entries have 100% progress
+  const completedEntries = progressEntries.filter((m) => m.percentage === 100).length;
+  
+  // Contract is completed if completed entries >= expected entries
+  if (completedEntries >= expectedEntries) {
+    return "completed";
+  }
+  
+  return "in_progress";
 }
 
 // Generate placeholder data that matches the screenshot structure

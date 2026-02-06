@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useSettings } from "@/components/providers/settings-provider";
 import { DashboardHeader } from "./header";
@@ -37,6 +37,7 @@ import {
   ShortcutHint,
 } from "@/lib/keyboard-shortcuts";
 import { useNotifications } from "@/components/providers/notification-provider";
+import { ProgressCharts, type ChartFilter } from "./progress-charts";
 
 export function DashboardContent() {
   const { loading: authLoading, isPlaceholderMode, user } = useAuth();
@@ -49,6 +50,7 @@ export function DashboardContent() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [chartFilter, setChartFilter] = useState<ChartFilter | null>(null);
   const [filters, setFilters] = useState<DashboardFilters>({
     year: new Date().getFullYear(),
     search: "",
@@ -117,7 +119,7 @@ export function DashboardContent() {
         if (!silent) setIsLoading(false);
       }
     },
-    [filters.year, isPlaceholderMode]
+    [filters.year, isPlaceholderMode],
   );
 
   // Fetch data on mount and when year changes
@@ -146,7 +148,7 @@ export function DashboardContent() {
         case "SEARCH_FOCUS":
           // Focus search input
           const searchInput = document.querySelector(
-            'input[placeholder*="Cari"]'
+            'input[placeholder*="Cari"]',
           ) as HTMLInputElement;
           searchInput?.focus();
           break;
@@ -164,8 +166,8 @@ export function DashboardContent() {
             settings.theme === "light"
               ? "dark"
               : settings.theme === "dark"
-              ? "system"
-              : "light";
+                ? "system"
+                : "light";
           updateSettings({ theme: nextTheme });
           break;
         case "SHOW_SHORTCUTS":
@@ -182,7 +184,7 @@ export function DashboardContent() {
           break;
       }
     },
-    [loadData, settings.theme, updateSettings, setNotificationSidebarOpen]
+    [loadData, settings.theme, updateSettings, setNotificationSidebarOpen],
   );
 
   useKeyboardShortcuts({ onAction: handleShortcutAction });
@@ -198,13 +200,48 @@ export function DashboardContent() {
     loadData();
   };
 
+  // Filter data based on chart selection
+  const chartFilteredData = useMemo(() => {
+    if (!chartFilter) return data;
+
+    switch (chartFilter.type) {
+      case "customer":
+        return data.filter((customer) => customer.id === chartFilter.value);
+      case "area":
+        return data
+          .map((customer) => ({
+            ...customer,
+            areas: customer.areas.filter(
+              (area) => area.id === chartFilter.value,
+            ),
+          }))
+          .filter((customer) => customer.areas.length > 0);
+      case "status":
+        return data
+          .map((customer) => ({
+            ...customer,
+            areas: customer.areas
+              .map((area) => ({
+                ...area,
+                contracts: area.contracts.filter(
+                  (contract) => contract.yearly_status === chartFilter.value,
+                ),
+              }))
+              .filter((area) => area.contracts.length > 0),
+          }))
+          .filter((customer) => customer.areas.length > 0);
+      default:
+        return data;
+    }
+  }, [data, chartFilter]);
+
   // Calculate statistics
   const stats = {
     totalCustomers: data.length,
     totalContracts: data.reduce(
       (sum, c) =>
         sum + c.areas.reduce((aSum, a) => aSum + a.contracts.length, 0),
-      0
+      0,
     ),
     completed: data.reduce(
       (sum, c) =>
@@ -214,9 +251,9 @@ export function DashboardContent() {
             aSum +
             a.contracts.filter((con) => con.yearly_status === "completed")
               .length,
-          0
+          0,
         ),
-      0
+      0,
     ),
     inProgress: data.reduce(
       (sum, c) =>
@@ -226,9 +263,9 @@ export function DashboardContent() {
             aSum +
             a.contracts.filter((con) => con.yearly_status === "in_progress")
               .length,
-          0
+          0,
         ),
-      0
+      0,
     ),
     notStarted: data.reduce(
       (sum, c) =>
@@ -238,9 +275,9 @@ export function DashboardContent() {
             aSum +
             a.contracts.filter((con) => con.yearly_status === "not_started")
               .length,
-          0
+          0,
         ),
-      0
+      0,
     ),
   };
 
@@ -381,6 +418,13 @@ export function DashboardContent() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Progress Charts */}
+          <ProgressCharts
+            data={data}
+            onFilterChange={setChartFilter}
+            activeFilter={chartFilter}
+          />
         </div>
 
         {/* Filter Section */}
@@ -390,7 +434,7 @@ export function DashboardContent() {
               <DashboardFiltersBar
                 filters={filters}
                 onFiltersChange={setFilters}
-                customers={data}
+                customers={chartFilteredData}
               />
             </CardContent>
           </Card>
@@ -398,9 +442,9 @@ export function DashboardContent() {
 
         {/* BAPP Table */}
         <div>
-          <div className="h-[calc(100vh-320px)] sm:h-[calc(100vh-280px)] min-h-64 sm:min-h-96 rounded-lg border shadow-sm overflow-auto isolate">
+          <div className="h-[calc(100vh-420px)] sm:h-[calc(100vh-380px)] min-h-64 sm:min-h-96 rounded-lg border shadow-sm overflow-auto isolate">
             <BAPPTable
-              data={data}
+              data={chartFilteredData}
               filters={filters}
               isLoading={isLoading}
               isAdmin={isAdmin}
