@@ -349,79 +349,51 @@ export function DashboardContent() {
           </div>
 
           {/* Statistics Cards & Filter Section */}
-          <div className="flex flex-col lg:flex-row gap-3 sm:gap-4">
+          <div className="flex flex-col lg:flex-col gap-3 sm:gap-4">
             {/* Statistics Cards */}
-            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:w-auto">
-              <Card className="w-full min-w-[200px]">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-xs sm:text-sm font-medium">
-                    Total Customer
-                  </CardTitle>
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">
-                    {stats.totalCustomers}
+            <Card className="p-3 sm:p-4">
+              <div className="grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+                <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-muted/50 border">
+                  <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Customer</p>
+                    <p className="text-lg sm:text-xl font-bold">{stats.totalCustomers}</p>
                   </div>
-                </CardContent>
-              </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-xs sm:text-[1rem] font-medium">
-                  Total Kontrak
-                </CardTitle>
-                <FileText className="h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl sm:text-3xl font-bold">
-                  {stats.totalContracts}
                 </div>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-xs sm:text-[1rem] font-medium">
-                  Selesai
-                </CardTitle>
-                <CheckCircle2 className="h-4 w-4 sm:h-6 sm:w-6 text-emerald-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl sm:text-3xl font-bold text-emerald-600">
-                  {stats.completed}
+                <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-muted/80 border">
+                  <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Kontrak</p>
+                    <p className="text-lg sm:text-xl font-bold">{stats.totalContracts}</p>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-xs sm:text-[1rem] font-medium">
-                  Dalam Proses
-                </CardTitle>
-                <Clock className="h-4 w-4 sm:h-6 sm:w-6 text-amber-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl sm:text-3xl font-bold text-amber-600">
-                  {stats.inProgress}
+                <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Selesai</p>
+                    <p className="text-lg sm:text-xl font-bold text-emerald-600">{stats.completed}</p>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
 
-            <Card className="col-span-2 sm:col-span-1">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-xs sm:text-[1rem] font-medium">
-                  Belum Mulai
-                </CardTitle>
-                <AlertCircle className="h-4 w-4 sm:h-6 sm:w-6 text-neutral-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl sm:text-3xl font-bold text-neutral-500">
-                  {stats.notStarted}
+                <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border">
+                  <Clock className="h-5 w-5 text-amber-600 shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Proses</p>
+                    <p className="text-lg sm:text-xl font-bold text-amber-600">{stats.inProgress}</p>
+                  </div>
                 </div>
-              </CardContent>
+
+                <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-neutral-100 dark:bg-neutral-800/50 col-span-2 sm:col-span-1 border">
+                  <AlertCircle className="h-5 w-5 text-neutral-500 shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Belum Mulai</p>
+                    <p className="text-lg sm:text-xl font-bold text-neutral-500">{stats.notStarted}</p>
+                  </div>
+                </div>
+              </div>
             </Card>
-          </div>
 
           {/* Progress Charts */}
           <ProgressCharts
@@ -487,6 +459,7 @@ export function DashboardContent() {
           open={showShortcutsDialog}
           onOpenChange={setShowShortcutsDialog}
         />
+        </div>
       </main>
     </div>
   );
