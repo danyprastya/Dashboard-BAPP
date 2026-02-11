@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useRef,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { logger } from "@/lib/logger";
@@ -50,69 +51,105 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPlaceholderMode, setIsPlaceholderMode] = useState(false);
+  const initRef = useRef(false);
+  const profileFetchingRef = useRef(false);
 
-  // Fetch user profile from profiles table (read-only, never overwrites roles)
+  // Fetch user profile with timeout protection
   const fetchUserProfile = useCallback(
     async (
       userId: string,
       userEmail?: string,
       userName?: string,
     ): Promise<UserProfile | null> => {
+      // Prevent duplicate fetches
+      if (profileFetchingRef.current) {
+        console.log("[Auth] Profile fetch already in progress, skipping");
+        return null;
+      }
+      profileFetchingRef.current = true;
+
+      console.log("[Auth] fetchUserProfile called for:", userId);
       const supabase = createClient();
-      if (!supabase) return null;
+      if (!supabase) {
+        console.log("[Auth] No supabase client, returning null");
+        profileFetchingRef.current = false;
+        return null;
+      }
+
+      // Create timeout promise (3 seconds)
+      const timeoutPromise = new Promise<null>((resolve) => {
+        setTimeout(() => {
+          console.warn("[Auth] Profile fetch timeout (3s)");
+          resolve(null);
+        }, 3000);
+      });
 
       try {
-        // Fetch profile from DB - single source of truth for roles
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", userId)
-          .single();
-
-        if (data) {
-          return data as UserProfile;
-        }
-
-        // Profile not found (PGRST116) - only for brand-new users
-        if (error?.code === "PGRST116" && userEmail) {
-          console.log("Profile not found, creating for new user:", userEmail);
-
-          const { data: newProfile, error: insertError } = await supabase
+        // Race between actual fetch and timeout
+        const fetchPromise = (async () => {
+          const { data, error } = await supabase
             .from("profiles")
-            .insert({
-              id: userId,
-              email: userEmail,
-              full_name: userName || userEmail.split("@")[0],
-              role: "user",
-              created_at: new Date().toISOString(),
-            })
-            .select()
+            .select("*")
+            .eq("id", userId)
             .single();
 
-          if (insertError) {
-            if (insertError.code === "23505") {
-              // Race condition: profile was created elsewhere, fetch it
-              const { data: existing } = await supabase
-                .from("profiles")
-                .select("*")
-                .eq("id", userId)
-                .single();
-              if (existing) return existing as UserProfile;
-            }
-            console.warn("Profile insert issue:", insertError.message);
-          } else if (newProfile) {
-            return newProfile as UserProfile;
+          if (data) {
+            console.log(
+              "[Auth] Profile found:",
+              data.email,
+              "role:",
+              data.role,
+            );
+            return data as UserProfile;
           }
-        }
 
-        if (error && error.code !== "PGRST116") {
-          console.error("fetchUserProfile DB error:", error.message);
-        }
+          // Profile not found (PGRST116) - only for brand-new users
+          if (error?.code === "PGRST116" && userEmail) {
+            console.log("[Auth] Profile not found, creating for:", userEmail);
 
-        return null;
+            const { data: newProfile, error: insertError } = await supabase
+              .from("profiles")
+              .insert({
+                id: userId,
+                email: userEmail,
+                full_name: userName || userEmail.split("@")[0],
+                role: "user",
+                created_at: new Date().toISOString(),
+              })
+              .select()
+              .single();
+
+            if (insertError) {
+              if (insertError.code === "23505") {
+                console.log("[Auth] Race condition, fetching existing profile");
+                const { data: existing } = await supabase
+                  .from("profiles")
+                  .select("*")
+                  .eq("id", userId)
+                  .single();
+                if (existing) return existing as UserProfile;
+              }
+              console.warn("[Auth] Profile insert issue:", insertError.message);
+            } else if (newProfile) {
+              console.log("[Auth] New profile created:", newProfile.email);
+              return newProfile as UserProfile;
+            }
+          }
+
+          if (error && error.code !== "PGRST116") {
+            console.error("[Auth] fetchUserProfile error:", error.message);
+          }
+
+          return null;
+        })();
+
+        const result = await Promise.race([fetchPromise, timeoutPromise]);
+        return result;
       } catch (err: unknown) {
-        console.error("fetchUserProfile exception:", err);
+        console.error("[Auth] fetchUserProfile exception:", err);
         return null;
+      } finally {
+        profileFetchingRef.current = false;
       }
     },
     [],
@@ -130,10 +167,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, fetchUserProfile]);
 
   useEffect(() => {
+    // Prevent double initialization in React Strict Mode
+    if (initRef.current) return;
+    initRef.current = true;
+
+    console.log("[Auth] Initializing auth provider...");
+
     const supabase = createClient();
 
     if (!supabase) {
       // Placeholder mode - simulate logged in user for development
+      console.log("[Auth] No Supabase config, entering placeholder mode");
       setIsPlaceholderMode(true);
       setUser({
         id: "placeholder-user",
@@ -147,42 +191,140 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         id: "placeholder-user",
         email: "demo@example.com",
         full_name: "Demo User",
-        role: "super_admin", // Demo mode has full access
+        role: "super_admin",
         created_at: new Date().toISOString(),
       });
       setLoading(false);
       return;
     }
 
-    // Single source of truth: onAuthStateChange handles all auth events
-    // INITIAL_SESSION fires first with current session, then SIGNED_IN/OUT etc.
+    // STEP 1: Initialize with explicit getSession() with timeout protection
+    const initializeAuth = async () => {
+      console.log("[Auth] Step 1: Getting session...");
+
+      // Create getSession with timeout (3 seconds)
+      const sessionTimeout = new Promise<{
+        data: { session: null };
+        error: { message: string };
+      }>((resolve) => {
+        setTimeout(() => {
+          console.warn("[Auth] getSession timeout (3s)");
+          resolve({
+            data: { session: null },
+            error: { message: "Session check timeout" },
+          });
+        }, 3000);
+      });
+
+      try {
+        const result = await Promise.race([
+          supabase.auth.getSession(),
+          sessionTimeout,
+        ]);
+
+        const {
+          data: { session },
+          error: sessionError,
+        } = result;
+
+        if (sessionError) {
+          console.error("[Auth] getSession error:", sessionError.message);
+          setUser(null);
+          setUserProfile(null);
+          // Set loading false immediately
+          console.log("[Auth] Setting loading to false (session error)");
+          setLoading(false);
+          return;
+        }
+
+        if (session?.user) {
+          console.log("[Auth] Session found for:", session.user.email);
+          setUser(session.user);
+
+          // Set loading false IMMEDIATELY - don't wait for profile
+          console.log("[Auth] Setting loading to false (session found)");
+          setLoading(false);
+
+          // Fetch profile ASYNC - not blocking
+          fetchUserProfile(
+            session.user.id,
+            session.user.email || undefined,
+            session.user.user_metadata?.full_name || undefined,
+          ).then((profile) => {
+            setUserProfile(profile);
+            console.log(
+              "[Auth] Profile loaded async, role:",
+              profile?.role || "none",
+            );
+          });
+        } else {
+          console.log("[Auth] No session found");
+          setUser(null);
+          setUserProfile(null);
+          console.log("[Auth] Setting loading to false (no session)");
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("[Auth] initializeAuth exception:", err);
+        setUser(null);
+        setUserProfile(null);
+        console.log("[Auth] Setting loading to false (exception)");
+        setLoading(false);
+      }
+    };
+
+    // Run initialization
+    initializeAuth();
+
+    // STEP 2: Setup listener for SUBSEQUENT auth changes (sign in, sign out, token refresh)
+    // This listener does NOT control initial loading - only reacts to changes
+    console.log("[Auth] Step 2: Setting up auth state listener...");
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
-      async (_event: AuthChangeEvent, session: Session | null) => {
-        try {
-          setUser(session?.user ?? null);
+      (event: AuthChangeEvent, session: Session | null) => {
+        console.log("[Auth] Auth state changed:", event);
 
-          if (session?.user) {
-            const profile = await fetchUserProfile(
-              session.user.id,
-              session.user.email || undefined,
-              session.user.user_metadata?.full_name || undefined,
-            );
-            setUserProfile(profile);
-          } else {
-            setUserProfile(null);
-          }
-        } catch (err) {
-          console.error("Auth state change error:", err);
+        // Skip INITIAL_SESSION since we handle it above with getSession()
+        if (event === "INITIAL_SESSION") {
+          console.log(
+            "[Auth] Skipping INITIAL_SESSION (handled by getSession)",
+          );
+          return;
+        }
+
+        // Handle actual auth changes
+        if (event === "SIGNED_OUT") {
+          console.log("[Auth] User signed out");
+          setUser(null);
           setUserProfile(null);
-        } finally {
-          setLoading(false);
+          return;
+        }
+
+        if (session?.user) {
+          console.log("[Auth] Session updated for:", session.user.email);
+          setUser(session.user);
+
+          // Fetch updated profile async - NOT awaiting/blocking
+          fetchUserProfile(
+            session.user.id,
+            session.user.email || undefined,
+            session.user.user_metadata?.full_name || undefined,
+          ).then((profile) => {
+            setUserProfile(profile);
+            console.log("[Auth] Profile updated for:", session.user.email);
+          });
+        } else {
+          setUser(null);
+          setUserProfile(null);
         }
       },
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      console.log("[Auth] Cleaning up subscription");
+      subscription.unsubscribe();
+    };
   }, [fetchUserProfile]);
 
   const signIn = async (email: string, password: string) => {

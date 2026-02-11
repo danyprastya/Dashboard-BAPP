@@ -1,21 +1,15 @@
 import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Singleton Supabase browser client - reused across all calls
-let cachedClient: ReturnType<typeof createBrowserClient> | null = null;
-let checkedEnv = false;
+let cachedClient: SupabaseClient | null = null;
 
 // Supabase client for browser/client components (singleton pattern)
-export function createClient() {
-  // If we already checked and env vars were missing, return null fast
-  if (checkedEnv && cachedClient === null) {
-    return null;
-  }
-
+export function createClient(): SupabaseClient | null {
+  // Return cached client if exists and valid
   if (cachedClient) {
     return cachedClient;
   }
-
-  checkedEnv = true;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   // Support both key names for flexibility
@@ -23,12 +17,11 @@ export function createClient() {
                           process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn(
-      "Supabase credentials not found. Using placeholder mode."
-    );
+    console.warn("[Supabase] Credentials not found. Using placeholder mode.");
     return null;
   }
 
+  console.log("[Supabase] Creating new browser client");
   cachedClient = createBrowserClient(supabaseUrl, supabaseAnonKey);
   return cachedClient;
 }

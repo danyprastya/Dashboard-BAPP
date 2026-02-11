@@ -59,7 +59,7 @@ export function ExportDialog({
       const customerName = selectedCustomer?.name;
 
       if (format === "excel") {
-        exportToExcel(data, {
+        await exportToExcel(data, {
           format: "excel",
           scope: selectedCustomerId === "all" ? "all" : "customer",
           year,
@@ -114,10 +114,11 @@ export function ExportDialog({
                     className="flex items-center gap-2 cursor-pointer"
                   >
                     <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
-                    Excel (.xls)
+                    Excel (.xlsx)
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Format tabel dengan warna progress seperti dashboard
+                    Format tabel dengan cell merging untuk customer dan kontrak
+                    yang sama
                   </p>
                 </div>
               </div>

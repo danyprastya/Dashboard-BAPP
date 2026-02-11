@@ -47,10 +47,8 @@ import {
   XCircle,
   FileUp,
   Download,
-  Zap,
 } from "lucide-react";
 import { EditContractDialog } from "./edit-contract-dialog";
-import { BatchOperationsDialog } from "./batch-operations";
 
 interface BAPPTableProps {
   data: CustomerWithAreas[];
@@ -87,15 +85,6 @@ export function BAPPTable({
     useState<ContractWithProgress | null>(null);
   const [editCustomerName, setEditCustomerName] = useState("");
   const [editAreaName, setEditAreaName] = useState("");
-  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
-  const [batchContract, setBatchContract] =
-    useState<ContractWithProgress | null>(null);
-
-  // Handler for opening batch operations dialog
-  const handleBatchClick = (contract: ContractWithProgress) => {
-    setBatchContract(contract);
-    setBatchDialogOpen(true);
-  };
 
   // Handler for opening edit contract dialog
   const handleEditClick = (
@@ -412,19 +401,22 @@ export function BAPPTable({
         <table className="w-full border-collapse text-sm">
           <thead className="sticky top-10 z-20 shadow-sm">
             <tr className="border-b bg-muted">
-              <th className="sticky left-0 z-30 w-12 border-r bg-muted px-3 py-3 text-center font-medium">
+              <th className="sticky left-0 z-30 w-12 border-r bg-muted px-3 py-3 text-left font-medium">
                 NO
               </th>
-              <th className="sticky left-12 z-30 w-32 border-r bg-muted px-3 py-3 text-left font-medium">
+              <th className="sticky z-30 w-20 border-r bg-muted px-3 py-3 text-left font-medium">
+                Ekstrak
+              </th>
+              <th className="sticky z-30 w-32 border-r bg-muted px-3 py-3 text-left font-medium">
                 CUSTOMER
               </th>
-              <th className="sticky  z-30 w-50 border-r bg-muted px-3 py-3 text-left font-medium">
+              <th className="sticky z-30 w-60 border-r bg-muted px-3 py-3 text-left font-medium">
                 NAMA KONTRAK
               </th>
               <th className="sticky z-30 w-36 border-r bg-muted px-3 py-3 text-left font-medium">
                 AREA
               </th>
-              <th className="w-24 border-l bg-muted px-2 py-3 text-center font-medium">
+              <th className="w-26 border-l bg-muted px-2 py-3 text-center font-medium">
                 PERIODE
               </th>
               <th className="w-12 border-r bg-muted px-1 py-3 text-center font-medium text-[10px]"></th>
@@ -437,7 +429,7 @@ export function BAPPTable({
                 </th>
               ))}
               {isAdmin && (
-                <th className="w-16 bg-muted px-3 py-3 text-center font-medium">
+                <th className="w-16 border bg-muted px-3 py-3 text-center font-medium">
                   AKSI
                 </th>
               )}
@@ -459,22 +451,20 @@ export function BAPPTable({
                   </td>
                 )}
 
-                {/* Customer name - sticky with rowspan */}
                 {row.isFirstInCustomer && row.customerRowSpan > 0 && (
                   <td
                     rowSpan={row.customerRowSpan}
                     className="sticky left-0 z-10 border bg-background px-3 py-2 font-medium align-middle"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span>{row.customer.name}</span>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 shrink-0 text-muted-foreground hover:text-emerald-600"
-                            onClick={() => {
-                              exportCustomerToExcel(row.customer, year);
+                            onClick={async () => {
+                              await exportCustomerToExcel(row.customer, year);
                               showSuccessToast(
                                 `Data ${row.customer.name} berhasil diekspor`,
                               );
@@ -487,6 +477,18 @@ export function BAPPTable({
                           <p>Export ke Excel</p>
                         </TooltipContent>
                       </Tooltip>
+                    </div>
+                  </td>
+                )}
+
+                {/* Customer name - sticky with rowspan */}
+                {row.isFirstInCustomer && row.customerRowSpan > 0 && (
+                  <td
+                    rowSpan={row.customerRowSpan}
+                    className="sticky left-0 z-10 border bg-background px-3 py-2 font-medium align-middle"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span>{row.customer.name}</span>
                     </div>
                   </td>
                 )}
@@ -986,21 +988,6 @@ export function BAPPTable({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-amber-500"
-                            onClick={() => handleBatchClick(row.contract)}
-                          >
-                            <Zap className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Operasi batch</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-primary"
                             onClick={() =>
                               handleEditClick(
@@ -1062,17 +1049,6 @@ export function BAPPTable({
         areaName={editAreaName}
         onSave={() => onProgressUpdate?.()}
       />
-
-      {/* Batch Operations Dialog */}
-      {batchContract && (
-        <BatchOperationsDialog
-          open={batchDialogOpen}
-          onOpenChange={setBatchDialogOpen}
-          contract={batchContract}
-          year={year}
-          onComplete={() => onProgressUpdate?.()}
-        />
-      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

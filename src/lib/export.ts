@@ -1,6 +1,7 @@
-// Export functionality for Excel and Text
+// Export functionality using exceljs library for proper Excel files with styling
+import ExcelJS from "exceljs";
 import type { CustomerWithAreas, ContractWithProgress } from "@/types/database";
-import { MONTH_NAMES, MONTH_NAMES_FULL } from "@/types/database";
+import { MONTH_NAMES, MONTH_NAMES_FULL, parsePeriodToNumber } from "@/types/database";
 
 // Format date helper
 function formatDate(dateStr: string | null): string {
@@ -41,37 +42,38 @@ export interface ExportOptions {
   includeNotes?: boolean;
 }
 
-// Generate Excel-compatible HTML table that matches dashboard layout with merged cells
-export function generateExcelTable(
-  data: CustomerWithAreas[]
-): string {
-  // First, build flat row data with merge info
-  interface RowData {
-    rowNumber: number;
-    customer: string;
-    contract: string;
-    area: string;
-    period: string;
-    monthlyData: string[];
-    // Merge info
-    customerMergeDown: number;
-    contractMergeDown: number;
-    skipCustomer: boolean;
-    skipContract: boolean;
-  }
-  
-  const rowsData: RowData[] = [];
-  let rowNumber = 0;
+// Row data interface for Excel export with merge tracking
+interface ExcelRowData {
+  rowNumber: number;
+  customer: string;
+  contract: string;
+  area: string;
+  period: string;
+  periodValue: number; // For month merging
+  monthlyData: (number | string)[];
+  customerRowStart: number;
+  customerRowSpan: number;
+  contractRowStart: number;
+  contractRowSpan: number;
+  isFirstCustomerRow: boolean;
+  isFirstContractRow: boolean;
+  excelRowNumber: number; // Actual Excel row number for month merging
+}
 
-  // Calculate merge spans
+// Build flat row data with merge information for vertical merging
+function buildRowData(data: CustomerWithAreas[]): ExcelRowData[] {
+  const rowsData: ExcelRowData[] = [];
+  let rowNumber = 0;
+  let excelRow = 1; // Start at row 1 (row 0 is header in 0-indexed)
+
   data.forEach((customer) => {
-    // Count total contracts for this customer
+    // Count total contracts for this customer across all areas
     let customerContractCount = 0;
     customer.areas.forEach((area) => {
       customerContractCount += area.contracts.length;
     });
 
-    // Group contracts by name across all areas
+    // Group contracts by name across all areas for this customer
     const contractGroups = new Map<string, { contract: ContractWithProgress; area: string }[]>();
     customer.areas.forEach((area) => {
       area.contracts.forEach((contract) => {
@@ -83,20 +85,46 @@ export function generateExcelTable(
       });
     });
 
+    const customerRowStart = excelRow;
     let isFirstCustomerRow = true;
-    
+
     contractGroups.forEach((contractItems, contractKey) => {
+      const contractRowStart = excelRow;
       let isFirstContractRow = true;
-      
+
       contractItems.forEach(({ contract, area }) => {
         rowNumber++;
+
+        // Parse period value for correct data placement
+        const periodVal = parsePeriodToNumber(contract.period);
         
-        const monthlyData = MONTH_NAMES.map((_, monthIndex) => {
-          const progress = contract.monthly_progress.find(
-            (mp) => mp.month === monthIndex + 1
-          );
-          return progress ? `${progress.percentage}%` : "-";
-        });
+        // Get monthly progress data - place values at START of each period for merged cells
+        const monthlyData: (number | string)[] = Array(12).fill("-");
+        
+        if (periodVal >= 1) {
+          // For periods >= 1 month, place data at start of each period
+          for (let startMonth = 1; startMonth <= 12; startMonth += periodVal) {
+            const endMonth = Math.min(startMonth + periodVal - 1, 12);
+            // Progress is stored at the END month of each period
+            const progress = contract.monthly_progress.find(
+              (mp) => mp.month === endMonth
+            );
+            if (progress) {
+              // Place value at START month so merged cell shows it
+              monthlyData[startMonth - 1] = progress.percentage;
+            }
+          }
+        } else {
+          // For half-month periods, keep original logic
+          MONTH_NAMES.forEach((_, monthIndex) => {
+            const progress = contract.monthly_progress.find(
+              (mp) => mp.month === monthIndex + 1
+            );
+            if (progress) {
+              monthlyData[monthIndex] = progress.percentage;
+            }
+          });
+        }
 
         rowsData.push({
           rowNumber,
@@ -104,213 +132,272 @@ export function generateExcelTable(
           contract: contractKey,
           area,
           period: contract.period,
+          periodValue: periodVal,
           monthlyData,
-          customerMergeDown: isFirstCustomerRow ? customerContractCount - 1 : 0,
-          contractMergeDown: isFirstContractRow ? contractItems.length - 1 : 0,
-          skipCustomer: !isFirstCustomerRow,
-          skipContract: !isFirstContractRow,
+          customerRowStart,
+          customerRowSpan: customerContractCount,
+          contractRowStart,
+          contractRowSpan: contractItems.length,
+          isFirstCustomerRow,
+          isFirstContractRow,
+          excelRowNumber: excelRow + 1, // +1 because header is row 1
         });
 
+        excelRow++;
         isFirstCustomerRow = false;
         isFirstContractRow = false;
       });
     });
   });
-  
-  // Header row
-  const headers = [
-    "NO",
-    "CUSTOMER",
-    "NAMA KONTRAK",
-    "AREA",
-    "PERIODE",
-    ...MONTH_NAMES,
-  ];
 
-  // Generate HTML table for Excel
-  let html = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-<Styles>
-  <Style ss:ID="Header">
-    <Font ss:Bold="1"/>
-    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-    <Interior ss:Color="#E2E8F0" ss:Pattern="Solid"/>
-    <Borders>
-      <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
-    </Borders>
-  </Style>
-  <Style ss:ID="Cell">
-    <Alignment ss:Vertical="Center" ss:WrapText="1"/>
-    <Borders>
-      <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
-    </Borders>
-  </Style>
-  <Style ss:ID="CellCenter">
-    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-    <Borders>
-      <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
-    </Borders>
-  </Style>
-  <Style ss:ID="CellMerge">
-    <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
-    <Borders>
-      <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
-    </Borders>
-  </Style>
-  <Style ss:ID="Progress100">
-    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-    <Interior ss:Color="#22C55E" ss:Pattern="Solid"/>
-    <Font ss:Color="#FFFFFF"/>
-    <Borders>
-      <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
-    </Borders>
-  </Style>
-  <Style ss:ID="Progress75">
-    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-    <Interior ss:Color="#86EFAC" ss:Pattern="Solid"/>
-    <Borders>
-      <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
-    </Borders>
-  </Style>
-  <Style ss:ID="Progress50">
-    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-    <Interior ss:Color="#FDE047" ss:Pattern="Solid"/>
-    <Borders>
-      <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
-    </Borders>
-  </Style>
-  <Style ss:ID="Progress25">
-    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-    <Interior ss:Color="#FED7AA" ss:Pattern="Solid"/>
-    <Borders>
-      <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
-    </Borders>
-  </Style>
-  <Style ss:ID="Progress0">
-    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-    <Interior ss:Color="#F3F4F6" ss:Pattern="Solid"/>
-    <Font ss:Color="#9CA3AF"/>
-    <Borders>
-      <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>
-      <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>
-    </Borders>
-  </Style>
-</Styles>
-<Worksheet ss:Name="BAPP Report">
-<Table>
-`;
-
-  // Add column widths
-  html += `<Column ss:Width="40"/>`;  // NO
-  html += `<Column ss:Width="150"/>`; // CUSTOMER
-  html += `<Column ss:Width="250"/>`; // NAMA KONTRAK
-  html += `<Column ss:Width="150"/>`; // AREA
-  html += `<Column ss:Width="100"/>`; // PERIODE
-  for (let i = 0; i < 12; i++) {
-    html += `<Column ss:Width="60"/>`; // Month columns
-  }
-
-  // Header row
-  html += `<Row ss:Height="30">`;
-  headers.forEach((cell) => {
-    html += `<Cell ss:StyleID="Header"><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`;
-  });
-  html += `</Row>`;
-
-  // Data rows with merging
-  rowsData.forEach((row) => {
-    html += `<Row ss:Height="40">`;
-    
-    // NO column
-    html += `<Cell ss:StyleID="CellCenter"><Data ss:Type="Number">${row.rowNumber}</Data></Cell>`;
-    
-    // CUSTOMER column (with merge)
-    if (!row.skipCustomer) {
-      const mergeAttr = row.customerMergeDown > 0 ? ` ss:MergeDown="${row.customerMergeDown}"` : "";
-      html += `<Cell ss:StyleID="CellMerge"${mergeAttr}><Data ss:Type="String">${escapeXml(row.customer)}</Data></Cell>`;
-    }
-    
-    // NAMA KONTRAK column (with merge)
-    if (!row.skipContract) {
-      const mergeAttr = row.contractMergeDown > 0 ? ` ss:MergeDown="${row.contractMergeDown}"` : "";
-      html += `<Cell ss:StyleID="CellMerge"${mergeAttr}><Data ss:Type="String">${escapeXml(row.contract)}</Data></Cell>`;
-    }
-    
-    // Set index for next cells (need to skip merged cells)
-    if (row.skipCustomer && row.skipContract) {
-      html += `<Cell ss:Index="4" ss:StyleID="Cell"><Data ss:Type="String">${escapeXml(row.area)}</Data></Cell>`;
-    } else if (row.skipCustomer) {
-      html += `<Cell ss:Index="3" ss:StyleID="CellMerge"${row.contractMergeDown > 0 ? ` ss:MergeDown="${row.contractMergeDown}"` : ""}><Data ss:Type="String">${escapeXml(row.contract)}</Data></Cell>`;
-      html += `<Cell ss:StyleID="Cell"><Data ss:Type="String">${escapeXml(row.area)}</Data></Cell>`;
-    } else if (row.skipContract) {
-      html += `<Cell ss:Index="4" ss:StyleID="Cell"><Data ss:Type="String">${escapeXml(row.area)}</Data></Cell>`;
-    } else {
-      // AREA column (no merge)
-      html += `<Cell ss:StyleID="Cell"><Data ss:Type="String">${escapeXml(row.area)}</Data></Cell>`;
-    }
-    
-    // PERIODE column
-    html += `<Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(row.period)}</Data></Cell>`;
-    
-    // Month columns
-    row.monthlyData.forEach((value) => {
-      const percent = parseInt(value.replace("%", "")) || 0;
-      let styleId = "Progress0";
-      if (percent === 100) styleId = "Progress100";
-      else if (percent >= 75) styleId = "Progress75";
-      else if (percent >= 50) styleId = "Progress50";
-      else if (percent >= 25) styleId = "Progress25";
-      else if (percent > 0) styleId = "Progress25";
-      
-      html += `<Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`;
-    });
-    
-    html += `</Row>`;
-  });
-
-  html += `</Table>
-</Worksheet>
-</Workbook>`;
-
-  return html;
+  return rowsData;
 }
 
-// Escape XML special characters
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+// Generate and download Excel file using exceljs with styling
+async function generateExcelFile(data: CustomerWithAreas[], filename: string): Promise<void> {
+  const rowsData = buildRowData(data);
+
+  // Create workbook and worksheet
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Dashboard BAPP";
+  wb.created = new Date();
+  
+  const ws = wb.addWorksheet("BAPP Report", {
+    views: [{ state: "frozen", ySplit: 1 }], // Freeze header row
+  });
+
+  // Define columns with widths
+  ws.columns = [
+    { key: "no", width: 6 },
+    { key: "customer", width: 28 },
+    { key: "contract", width: 45 },
+    { key: "area", width: 22 },
+    { key: "period", width: 16 },
+    ...MONTH_NAMES.map((name) => ({ key: name.toLowerCase(), width: 10 })),
+  ];
+
+  // Header row
+  const headers = ["NO", "CUSTOMER", "NAMA KONTRAK", "AREA", "PERIODE", ...MONTH_NAMES];
+  const headerRow = ws.addRow(headers);
+  
+  // Style header row
+  headerRow.height = 28;
+  headerRow.eachCell((cell) => {
+    // Header background color - dark blue
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF1E3A5F" }, // Dark blue
+    };
+    // Header font - white, bold
+    cell.font = {
+      bold: true,
+      color: { argb: "FFFFFFFF" },
+      size: 11,
+    };
+    // Alignment - center horizontal, middle vertical
+    cell.alignment = {
+      horizontal: "center",
+      vertical: "middle",
+      wrapText: true,
+    };
+    // Border
+    cell.border = {
+      top: { style: "thin", color: { argb: "FF000000" } },
+      left: { style: "thin", color: { argb: "FF000000" } },
+      bottom: { style: "thin", color: { argb: "FF000000" } },
+      right: { style: "thin", color: { argb: "FF000000" } },
+    };
+  });
+
+  // Alternating row colors for data
+  const evenRowColor = "FFF3F4F6"; // Light gray
+  const oddRowColor = "FFFFFFFF"; // White
+
+  // Add data rows
+  rowsData.forEach((row, rowIndex) => {
+    const rowData = [
+      row.rowNumber,
+      row.customer,
+      row.contract,
+      row.area,
+      row.period,
+      ...row.monthlyData.map((v) => {
+        if (v === "-") return "";
+        if (typeof v === "number") return `${v}%`;
+        return v;
+      }),
+    ];
+    
+    const dataRow = ws.addRow(rowData);
+    dataRow.height = 24;
+    
+    // Determine row background color (alternating)
+    const isEvenRow = rowIndex % 2 === 0;
+    const bgColor = isEvenRow ? evenRowColor : oddRowColor;
+    
+    dataRow.eachCell((cell, colNumber) => {
+      // Background color - alternating rows
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: bgColor },
+      };
+      
+      // Font
+      cell.font = {
+        size: 10,
+        color: { argb: "FF333333" },
+      };
+      
+      // Alignment - vertical always middle
+      // Horizontal: center for percentage columns (6-17), left for others
+      const isPercentageColumn = colNumber >= 6 && colNumber <= 17;
+      cell.alignment = {
+        horizontal: isPercentageColumn ? "center" : "left",
+        vertical: "middle",
+        wrapText: true,
+      };
+      
+      // Border
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFD1D5DB" } },
+        left: { style: "thin", color: { argb: "FFD1D5DB" } },
+        bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
+        right: { style: "thin", color: { argb: "FFD1D5DB" } },
+      };
+    });
+  });
+
+  // Apply merges for customer and contract columns
+  rowsData.forEach((row) => {
+    // Customer column merge (column B = 2)
+    if (row.isFirstCustomerRow && row.customerRowSpan > 1) {
+      ws.mergeCells(
+        row.customerRowStart + 1, 2,
+        row.customerRowStart + row.customerRowSpan, 2
+      );
+    }
+
+    // Contract column merge (column C = 3)
+    if (row.isFirstContractRow && row.contractRowSpan > 1) {
+      ws.mergeCells(
+        row.contractRowStart + 1, 3,
+        row.contractRowStart + row.contractRowSpan, 3
+      );
+    }
+  });
+
+  // After merging, reapply alignment to merged cells
+  rowsData.forEach((row) => {
+    if (row.isFirstCustomerRow && row.customerRowSpan > 1) {
+      const cell = ws.getCell(row.customerRowStart + 1, 2);
+      cell.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+    }
+    if (row.isFirstContractRow && row.contractRowSpan > 1) {
+      const cell = ws.getCell(row.contractRowStart + 1, 3);
+      cell.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+    }
+  });
+
+  // Apply horizontal month merging based on period
+  // Month columns start at column 6 (F = JAN) to column 17 (Q = DES)
+  const MONTH_START_COL = 6;
+  
+  rowsData.forEach((row) => {
+    const periodValue = row.periodValue;
+    
+    // Only merge if period > 1 month
+    if (periodValue > 1 && periodValue <= 12) {
+      const excelRow = row.excelRowNumber;
+      
+      // Calculate merge groups
+      // For period 3: merge cols 6-8 (JAN-MAR), 9-11 (APR-JUN), 12-14 (JUL-SEP), 15-17 (OKT-DES)
+      for (let startMonth = 1; startMonth <= 12; startMonth += periodValue) {
+        const endMonth = Math.min(startMonth + periodValue - 1, 12);
+        
+        if (endMonth > startMonth) {
+          const startCol = MONTH_START_COL + startMonth - 1;
+          const endCol = MONTH_START_COL + endMonth - 1;
+          
+          // Merge the cells
+          ws.mergeCells(excelRow, startCol, excelRow, endCol);
+          
+          // Reapply styling to merged cell
+          const mergedCell = ws.getCell(excelRow, startCol);
+          mergedCell.alignment = {
+            horizontal: "center",
+            vertical: "middle",
+            wrapText: true,
+          };
+        }
+      }
+    }
+  });
+
+  // Generate buffer and download
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { 
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// Legacy function kept for compatibility - now uses xlsx
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function generateExcelTable(_data: CustomerWithAreas[]): string {
+  // This function is no longer used but kept for backward compatibility
+  // The actual export now uses xlsx library directly
+  return "";
+}
+
+// Export to Excel using proper xlsx format
+export async function exportToExcel(
+  data: CustomerWithAreas[],
+  options: ExportOptions
+): Promise<void> {
+  // Filter data if customerName is specified
+  const filteredData = options.customerName
+    ? data.filter((c) => c.name === options.customerName)
+    : data;
+
+  const customerPart = options.customerName
+    ? `_${options.customerName.replace(/[^a-zA-Z0-9]/g, "_")}`
+    : "";
+  const filename = `BAPP_Report${customerPart}_TA_${options.year}_${formatExportDate()}.xlsx`;
+  
+  await generateExcelFile(filteredData, filename);
+}
+
+// Export single customer to Excel
+export async function exportCustomerToExcel(
+  customer: CustomerWithAreas,
+  year: number
+): Promise<void> {
+  const customerName = customer.name.replace(/[^a-zA-Z0-9]/g, "_");
+  const filename = `BAPP_Report_${customerName}_TA_${year}_${formatExportDate()}.xlsx`;
+  
+  await generateExcelFile([customer], filename);
+}
+
+// Download file helper (for text exports)
+export function downloadFile(content: string, filename: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 // Generate summary report data
@@ -401,9 +488,9 @@ export function generateContractTimeline(
 ): string {
   const lines: string[] = [];
 
-  lines.push("=" .repeat(60));
+  lines.push("=".repeat(60));
   lines.push(`LAPORAN PROGRESS KONTRAK`);
-  lines.push("=" .repeat(60));
+  lines.push("=".repeat(60));
   lines.push("");
   lines.push(`Kontrak    : ${contract.name}`);
   lines.push(`Customer   : ${customerName}`);
@@ -450,53 +537,11 @@ export function generateContractTimeline(
     lines.push("");
   });
 
-  lines.push("=" .repeat(60));
+  lines.push("=".repeat(60));
   lines.push(`Laporan dibuat: ${new Date().toLocaleString("id-ID")}`);
-  lines.push("=" .repeat(60));
+  lines.push("=".repeat(60));
 
   return lines.join("\n");
-}
-
-// Download file helper
-export function downloadFile(content: string, filename: string, mimeType: string): void {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-// Export to Excel (XML SpreadsheetML format)
-export function exportToExcel(
-  data: CustomerWithAreas[],
-  options: ExportOptions
-): void {
-  // Filter data if customerName is specified
-  const filteredData = options.customerName
-    ? data.filter((c) => c.name === options.customerName)
-    : data;
-
-  const xml = generateExcelTable(filteredData);
-  const customerPart = options.customerName
-    ? `_${options.customerName.replace(/[^a-zA-Z0-9]/g, "_")}`
-    : "";
-  const filename = `BAPP Report${customerPart}_${options.year}_${formatExportDate()}.xls`;
-  downloadFile(xml, filename, "application/vnd.ms-excel");
-}
-
-// Export single customer to Excel
-export function exportCustomerToExcel(
-  customer: CustomerWithAreas,
-  year: number
-): void {
-  const xml = generateExcelTable([customer]);
-  const customerName = customer.name.replace(/[^a-zA-Z0-9]/g, "_");
-  const filename = `BAPP Report_${customerName}_${year}_${formatExportDate()}.xls`;
-  downloadFile(xml, filename, "application/vnd.ms-excel");
 }
 
 // Generate TXT export content
@@ -571,7 +616,7 @@ export function exportToTxt(
   const customerPart = options.customerName
     ? `_${options.customerName.replace(/[^a-zA-Z0-9]/g, "_")}`
     : "";
-  const filename = `BAPP Report${customerPart}_${options.year}_${formatExportDate()}.txt`;
+  const filename = `BAPP_Report${customerPart}_TA_${options.year}_${formatExportDate()}.txt`;
   downloadFile(txt, filename, "text/plain;charset=utf-8");
 }
 
@@ -588,7 +633,7 @@ export function exportCustomerToTxt(
   };
   const txt = generateTxtData([customer], options);
   const customerName = customer.name.replace(/[^a-zA-Z0-9]/g, "_");
-  const filename = `BAPP Report_${customerName}_${year}_${formatExportDate()}.txt`;
+  const filename = `BAPP_Report_${customerName}_TA_${year}_${formatExportDate()}.txt`;
   downloadFile(txt, filename, "text/plain;charset=utf-8");
 }
 
@@ -600,9 +645,9 @@ export function exportSummaryReport(
   const summary = generateSummaryReport(data);
   const lines: string[] = [];
 
-  lines.push("=" .repeat(60));
+  lines.push("=".repeat(60));
   lines.push(`RINGKASAN LAPORAN BAPP TAHUN ${year}`);
-  lines.push("=" .repeat(60));
+  lines.push("=".repeat(60));
   lines.push("");
   lines.push(`Total Customer       : ${summary.totalCustomers}`);
   lines.push(`Total Kontrak        : ${summary.totalContracts}`);
@@ -627,9 +672,9 @@ export function exportSummaryReport(
   });
 
   lines.push("");
-  lines.push("=" .repeat(60));
+  lines.push("=".repeat(60));
   lines.push(`Laporan dibuat: ${new Date().toLocaleString("id-ID")}`);
-  lines.push("=" .repeat(60));
+  lines.push("=".repeat(60));
 
   const content = lines.join("\n");
   const filename = `BAPP_Summary_${year}_${new Date().toISOString().split("T")[0]}.txt`;
