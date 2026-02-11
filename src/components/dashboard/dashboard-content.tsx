@@ -9,7 +9,11 @@ import { BAPPTable } from "./bapp-table";
 import { ContractFormDialog } from "./contract-form-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LoadingSpinner } from "@/components/ui/loading";
+import {
+  LoadingSpinner,
+  ContainerSpinner,
+  TimeoutFallback,
+} from "@/components/ui/loading";
 import {
   generatePlaceholderData,
   calculateYearlyStatus,
@@ -40,7 +44,12 @@ import { useNotifications } from "@/components/providers/notification-provider";
 import { ProgressCharts, type ChartFilter } from "./progress-charts";
 
 export function DashboardContent() {
-  const { loading: authLoading, isPlaceholderMode, user } = useAuth();
+  const {
+    loading: authLoading,
+    isPlaceholderMode,
+    canEdit,
+    isSuperAdmin,
+  } = useAuth();
   const { settings, updateSettings } = useSettings();
   const { setIsOpen: setNotificationSidebarOpen } = useNotifications();
   const [data, setData] = useState<CustomerWithAreas[]>([]);
@@ -61,9 +70,19 @@ export function DashboardContent() {
     status: "all",
   });
 
-  // For demo purposes, treat logged in users as admin
-  // In production, you'd check user.role or user_metadata
-  const isAdmin = !!user;
+  // 5-second watchdog for auth loading — NOT a delay, just monitors if auth is stuck
+  const [authTimedOut, setAuthTimedOut] = useState(false);
+  useEffect(() => {
+    if (!authLoading) {
+      setAuthTimedOut(false);
+      return;
+    }
+    const watchdog = setTimeout(() => setAuthTimedOut(true), 5000);
+    return () => clearTimeout(watchdog);
+  }, [authLoading]);
+
+  // Role-based access: canEdit = admin or super_admin
+  const isAdmin = canEdit;
 
   // Fetch data function
   const loadData = useCallback(
@@ -71,9 +90,6 @@ export function DashboardContent() {
       if (!silent) setIsLoading(true);
 
       try {
-        // Simulate loading delay
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
         let fetchedData: CustomerWithAreas[];
 
         if (isSupabaseConfigured() && !isPlaceholderMode) {
@@ -284,6 +300,9 @@ export function DashboardContent() {
   };
 
   if (authLoading) {
+    if (authTimedOut) {
+      return <TimeoutFallback onRetry={() => window.location.reload()} />;
+    }
     return <LoadingSpinner fullScreen text="Memuat..." />;
   }
 
@@ -324,27 +343,31 @@ export function DashboardContent() {
                 <span className="hidden sm:inline">Export</span>
                 <ShortcutHint shortcut={SHORTCUTS.EXPORT} />
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowImportDialog(true)}
-                className="flex-1 sm:flex-none"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Import Tahun</span>
-                <span className="sm:hidden">Import</span>
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => setShowContractDialog(true)}
-                title="Ctrl+N"
-                className="flex-1 sm:flex-none"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Tambah Kontrak</span>
-                <span className="sm:hidden">Tambah</span>
-                <ShortcutHint shortcut={SHORTCUTS.NEW_CONTRACT} />
-              </Button>
+              {isAdmin && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowImportDialog(true)}
+                    className="flex-1 sm:flex-none"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    <span className="hidden sm:inline">Import Tahun</span>
+                    <span className="sm:hidden">Import</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setShowContractDialog(true)}
+                    title="Ctrl+N"
+                    className="flex-1 sm:flex-none"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    <span className="hidden sm:inline">Tambah Kontrak</span>
+                    <span className="sm:hidden">Tambah</span>
+                    <ShortcutHint shortcut={SHORTCUTS.NEW_CONTRACT} />
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
@@ -352,113 +375,135 @@ export function DashboardContent() {
           <div className="flex flex-col lg:flex-col gap-3 sm:gap-4">
             {/* Statistics Cards */}
             <Card className="p-3 sm:p-4">
-              <div className="grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-                <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-muted/50 border">
-                  <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Customer</p>
-                    <p className="text-lg sm:text-xl font-bold">{stats.totalCustomers}</p>
+              {isLoading ? (
+                <ContainerSpinner
+                  text="Memuat statistik..."
+                  className="min-h-20"
+                />
+              ) : (
+                <div className="grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+                  <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-muted/50 border">
+                    <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Customer</p>
+                      <p className="text-lg sm:text-xl font-bold">
+                        {stats.totalCustomers}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-muted/80 border">
-                  <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Kontrak</p>
-                    <p className="text-lg sm:text-xl font-bold">{stats.totalContracts}</p>
+                  <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-muted/80 border">
+                    <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Kontrak</p>
+                      <p className="text-lg sm:text-xl font-bold">
+                        {stats.totalContracts}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Selesai</p>
-                    <p className="text-lg sm:text-xl font-bold text-emerald-600">{stats.completed}</p>
+                  <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Selesai</p>
+                      <p className="text-lg sm:text-xl font-bold text-emerald-600">
+                        {stats.completed}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border">
-                  <Clock className="h-5 w-5 text-amber-600 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Proses</p>
-                    <p className="text-lg sm:text-xl font-bold text-amber-600">{stats.inProgress}</p>
+                  <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border">
+                    <Clock className="h-5 w-5 text-amber-600 shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Proses</p>
+                      <p className="text-lg sm:text-xl font-bold text-amber-600">
+                        {stats.inProgress}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-neutral-100 dark:bg-neutral-800/50 col-span-2 sm:col-span-1 border">
-                  <AlertCircle className="h-5 w-5 text-neutral-500 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Belum Mulai</p>
-                    <p className="text-lg sm:text-xl font-bold text-neutral-500">{stats.notStarted}</p>
+                  <div className="flex items-center gap-3 p-2 sm:p-3 rounded-lg bg-neutral-100 dark:bg-neutral-800/50 col-span-2 sm:col-span-1 border">
+                    <AlertCircle className="h-5 w-5 text-neutral-500 shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Belum Mulai
+                      </p>
+                      <p className="text-lg sm:text-xl font-bold text-neutral-500">
+                        {stats.notStarted}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </Card>
 
-          {/* Progress Charts */}
-          <ProgressCharts
-            data={data}
-            onFilterChange={setChartFilter}
-            activeFilter={chartFilter}
-          />
-        </div>
-
-        {/* Filter Section */}
-        <div className="my-3 sm:my-4">
-          <Card className="shadow-sm">
-            <CardContent className="pt-4 sm:pt-6 pb-4">
-              <DashboardFiltersBar
-                filters={filters}
-                onFiltersChange={setFilters}
-                customers={chartFilteredData}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* BAPP Table */}
-        <div>
-          <div className="h-[calc(100vh-420px)] sm:h-[calc(100vh-380px)] min-h-64 sm:min-h-96 rounded-lg border shadow-sm overflow-auto isolate">
-            <BAPPTable
-              data={chartFilteredData}
-              filters={filters}
+            {/* Progress Charts */}
+            <ProgressCharts
+              data={data}
               isLoading={isLoading}
-              isAdmin={isAdmin}
-              onProgressUpdate={handleProgressUpdate}
-              year={filters.year}
-              showPercentage={settings.showProgressPercentage}
+              onFilterChange={setChartFilter}
+              activeFilter={chartFilter}
+              onRefresh={() => loadData()}
             />
           </div>
-        </div>
 
-        {/* Contract Form Dialog */}
-        <ContractFormDialog
-          open={showContractDialog}
-          onOpenChange={setShowContractDialog}
-          onSave={handleContractSave}
-        />
+          {/* Filter Section */}
+          <div className="my-3 sm:my-4">
+            <Card className="shadow-sm">
+              <CardContent className="pt-4 sm:pt-6 pb-4">
+                <DashboardFiltersBar
+                  filters={filters}
+                  onFiltersChange={setFilters}
+                  customers={chartFilteredData}
+                />
+              </CardContent>
+            </Card>
+          </div>
 
-        {/* Import Year Dialog */}
-        <ImportYearDialog
-          open={showImportDialog}
-          onOpenChange={setShowImportDialog}
-          currentYear={filters.year}
-          onImportComplete={loadData}
-        />
+          {/* BAPP Table */}
+          <div>
+            <div className="h-[calc(100vh-420px)] sm:h-[calc(100vh-380px)] min-h-64 sm:min-h-96 rounded-lg border shadow-sm overflow-auto isolate">
+              <BAPPTable
+                data={chartFilteredData}
+                filters={filters}
+                isLoading={isLoading}
+                isAdmin={isAdmin}
+                onProgressUpdate={handleProgressUpdate}
+                onRefresh={() => loadData()}
+                year={filters.year}
+                showPercentage={settings.showProgressPercentage}
+              />
+            </div>
+          </div>
 
-        {/* Export Dialog */}
-        <ExportDialog
-          open={showExportDialog}
-          onOpenChange={setShowExportDialog}
-          data={data}
-          year={filters.year}
-        />
+          {/* Contract Form Dialog */}
+          <ContractFormDialog
+            open={showContractDialog}
+            onOpenChange={setShowContractDialog}
+            onSave={handleContractSave}
+          />
 
-        {/* Keyboard Shortcuts Dialog */}
-        <KeyboardShortcutsDialog
-          open={showShortcutsDialog}
-          onOpenChange={setShowShortcutsDialog}
-        />
+          {/* Import Year Dialog */}
+          <ImportYearDialog
+            open={showImportDialog}
+            onOpenChange={setShowImportDialog}
+            currentYear={filters.year}
+            onImportComplete={loadData}
+          />
+
+          {/* Export Dialog */}
+          <ExportDialog
+            open={showExportDialog}
+            onOpenChange={setShowExportDialog}
+            data={data}
+            year={filters.year}
+          />
+
+          {/* Keyboard Shortcuts Dialog */}
+          <KeyboardShortcutsDialog
+            open={showShortcutsDialog}
+            onOpenChange={setShowShortcutsDialog}
+          />
         </div>
       </main>
     </div>

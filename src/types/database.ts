@@ -116,12 +116,15 @@ export interface CustomerWithAreas {
 }
 
 // Auth Types
+export type UserRole = "user" | "admin" | "super_admin";
+
 export interface UserProfile {
   id: string;
   email: string;
   full_name: string | null;
-  role: "admin" | "viewer";
+  role: UserRole;
   created_at: string;
+  updated_at?: string;
 }
 
 // Filter Types

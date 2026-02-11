@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface LoadingSpinnerProps {
   size?: "sm" | "md" | "lg";
@@ -81,6 +82,46 @@ export function CardLoadingSkeleton() {
         <div className="h-4 w-1/4 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
         <div className="h-8 w-1/2 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
         <div className="h-4 w-3/4 animate-pulse rounded bg-neutral-200 dark:bg-neutral-800" />
+      </div>
+    </div>
+  );
+}
+
+export function ContainerSpinner({
+  text,
+  className,
+}: {
+  text?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`flex flex-col items-center justify-center gap-3 ${className || "min-h-50"}`}
+    >
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      {text && <p className="text-sm text-muted-foreground">{text}</p>}
+    </div>
+  );
+}
+
+export function TimeoutFallback({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-5 text-center max-w-md px-4">
+        <AlertCircle className="h-14 w-14 text-destructive" />
+        <div>
+          <h2 className="text-lg font-semibold">
+            Server Terlalu Lama Merespons
+          </h2>
+          <p className="text-sm text-muted-foreground mt-2">
+            Koneksi ke server memakan waktu terlalu lama. Silakan muat ulang
+            halaman.
+          </p>
+        </div>
+        <Button onClick={onRetry} size="lg">
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Muat Ulang Halaman
+        </Button>
       </div>
     </div>
   );

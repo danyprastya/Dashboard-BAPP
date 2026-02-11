@@ -20,14 +20,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ProgressDialog } from "./progress-dialog";
-import { TableLoadingSkeleton } from "@/components/ui/loading";
-import {
-  getProgressColorClass,
-  getStatusColorClass,
-} from "@/lib/placeholder-data";
+import { ContainerSpinner } from "@/components/ui/loading";
+import { getProgressColorClass } from "@/lib/placeholder-data";
 import { deleteContract } from "@/lib/supabase/data";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { showSuccessToast, showErrorToast } from "@/lib/toast";
+import { exportCustomerToExcel } from "@/lib/export";
 import type {
   CustomerWithAreas,
   DashboardFilters,
@@ -48,6 +46,7 @@ import {
   CheckCircle2,
   XCircle,
   FileUp,
+  Download,
   Zap,
 } from "lucide-react";
 import { EditContractDialog } from "./edit-contract-dialog";
@@ -59,6 +58,7 @@ interface BAPPTableProps {
   isLoading: boolean;
   isAdmin?: boolean;
   onProgressUpdate?: () => void;
+  onRefresh?: () => void;
   year?: number;
   showPercentage?: boolean;
 }
@@ -69,6 +69,7 @@ export function BAPPTable({
   isLoading,
   isAdmin = false,
   onProgressUpdate,
+  onRefresh,
   year = new Date().getFullYear(),
   showPercentage = true,
 }: BAPPTableProps) {
@@ -100,7 +101,7 @@ export function BAPPTable({
   const handleEditClick = (
     contract: ContractWithProgress,
     customerName: string,
-    areaName: string
+    areaName: string,
   ) => {
     setContractToEdit(contract);
     setEditCustomerName(customerName);
@@ -207,7 +208,7 @@ export function BAPPTable({
 
       // Sort by contract name to group same contracts together
       allContractsInCustomer.sort((a, b) =>
-        a.contract.name.localeCompare(b.contract.name)
+        a.contract.name.localeCompare(b.contract.name),
       );
 
       // Calculate total rows for this customer (considering half-month periods have 2 rows)
@@ -215,7 +216,7 @@ export function BAPPTable({
         (total, { contract }) => {
           return total + (isHalfMonthPeriod(contract.period) ? 2 : 1);
         },
-        0
+        0,
       );
 
       let isFirstInCustomer = true;
@@ -303,7 +304,7 @@ export function BAPPTable({
   // Handle progress cell click
   const handleProgressClick = (
     progress: MonthlyProgressDetail,
-    contract: ContractWithProgress
+    contract: ContractWithProgress,
   ) => {
     setSelectedProgress(progress);
     setSelectedContract(contract);
@@ -340,7 +341,9 @@ export function BAPPTable({
   };
 
   if (isLoading) {
-    return <TableLoadingSkeleton rows={8} />;
+    return (
+      <ContainerSpinner text="Memuat data tabel..." className="min-h-75" />
+    );
   }
 
   if (filteredData.length === 0) {
@@ -351,6 +354,17 @@ export function BAPPTable({
         <p className="text-sm text-muted-foreground">
           Tidak ada kontrak yang sesuai dengan filter yang dipilih.
         </p>
+        {onRefresh && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            onClick={onRefresh}
+          >
+            <Loader2 className="mr-2 h-4 w-4" />
+            Muat Ulang Data
+          </Button>
+        )}
       </div>
     );
   }
@@ -451,7 +465,29 @@ export function BAPPTable({
                     rowSpan={row.customerRowSpan}
                     className="sticky left-0 z-10 border bg-background px-3 py-2 font-medium align-middle"
                   >
-                    {row.customer.name}
+                    <div className="flex items-center justify-between gap-2">
+                      <span>{row.customer.name}</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-emerald-600"
+                            onClick={() => {
+                              exportCustomerToExcel(row.customer, year);
+                              showSuccessToast(
+                                `Data ${row.customer.name} berhasil diekspor`,
+                              );
+                            }}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Export ke Excel</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   </td>
                 )}
 
@@ -554,13 +590,14 @@ export function BAPPTable({
                       // Get progress for the current sub_period only
                       const progress = row.contract.monthly_progress.find(
                         (p) =>
-                          p.month === month && p.sub_period === currentSubPeriod
+                          p.month === month &&
+                          p.sub_period === currentSubPeriod,
                       );
 
                       // Helper to render tooltip content
                       const renderTooltipContent = (
                         prog: typeof progress,
-                        periodLabel: string
+                        periodLabel: string,
                       ) => {
                         if (!prog) {
                           return (
@@ -579,10 +616,10 @@ export function BAPPTable({
                           prog.percentage === 100
                             ? "Selesai"
                             : prog.percentage > 0
-                            ? "Proses"
-                            : "Belum";
+                              ? "Proses"
+                              : "Belum";
                         const completedSigs = prog.signatures.filter(
-                          (s) => s.is_completed
+                          (s) => s.is_completed,
                         );
 
                         return (
@@ -727,21 +764,21 @@ export function BAPPTable({
                                   ? showPercentage
                                     ? `${progress.percentage}%`
                                     : progress.percentage === 100
-                                    ? "✓"
-                                    : progress.percentage > 0
-                                    ? "○"
-                                    : ""
+                                      ? "✓"
+                                      : progress.percentage > 0
+                                        ? "○"
+                                        : ""
                                   : ""}
                               </button>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-sm">
                               {renderTooltipContent(
                                 progress,
-                                `Periode ${currentSubPeriod}`
+                                `Periode ${currentSubPeriod}`,
                               )}
                             </TooltipContent>
                           </Tooltip>
-                        </td>
+                        </td>,
                       );
                     }
                     return cells;
@@ -757,7 +794,7 @@ export function BAPPTable({
 
                     // Get progress for this active month (sub_period = 1 for regular periods)
                     const progress = row.contract.monthly_progress.find(
-                      (p) => p.month === activeMonth && p.sub_period === 1
+                      (p) => p.month === activeMonth && p.sub_period === 1,
                     );
 
                     if (!progress) {
@@ -770,12 +807,12 @@ export function BAPPTable({
                       progress.percentage === 100
                         ? "Selesai"
                         : progress.percentage > 0
-                        ? "Proses"
-                        : "Belum";
+                          ? "Proses"
+                          : "Belum";
 
                     // Get completed signatures
                     const completedSignatures = progress.signatures.filter(
-                      (sig) => sig.is_completed
+                      (sig) => sig.is_completed,
                     );
 
                     cells.push(
@@ -791,16 +828,16 @@ export function BAPPTable({
                                 handleProgressClick(progress, row.contract)
                               }
                               className={`flex h-8 w-full items-center justify-center rounded text-xs font-medium transition-all hover:ring-2 hover:ring-primary/50 ${getProgressColorClass(
-                                progress.percentage
+                                progress.percentage,
                               )}`}
                             >
                               {showPercentage
                                 ? `${progress.percentage}%`
                                 : progress.percentage === 100
-                                ? "✓"
-                                : progress.percentage > 0
-                                ? "○"
-                                : ""}
+                                  ? "✓"
+                                  : progress.percentage > 0
+                                    ? "○"
+                                    : ""}
                             </button>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-sm">
@@ -815,8 +852,8 @@ export function BAPPTable({
                                   status === "Selesai"
                                     ? "outline"
                                     : status === "Proses"
-                                    ? "outline"
-                                    : "outline"
+                                      ? "outline"
+                                      : "outline"
                                 }
                                 className="text-xs text-white"
                               >
@@ -928,7 +965,7 @@ export function BAPPTable({
                             </p>
                           </TooltipContent>
                         </Tooltip>
-                      </td>
+                      </td>,
                     );
 
                     currentMonth = activeMonth + 1;
@@ -969,7 +1006,7 @@ export function BAPPTable({
                               handleEditClick(
                                 row.contract,
                                 row.customer.name,
-                                row.area.name
+                                row.area.name,
                               )
                             }
                           >

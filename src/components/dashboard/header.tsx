@@ -19,17 +19,44 @@ import {
   LayoutDashboard,
   Settings,
   ScrollText,
+  Users,
+  Shield,
+  ShieldCheck,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { SettingsDialog } from "./settings-dialog";
 import { LogViewerDialog } from "./log-viewer-dialog";
+import { UserManagementDialog } from "./user-management-dialog";
 import { NotificationBell, NotificationSidebar } from "./notification-sidebar";
 
+// Role badge config
+const ROLE_BADGES = {
+  user: {
+    label: "User",
+    icon: User,
+    className:
+      "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300",
+  },
+  admin: {
+    label: "Admin",
+    icon: Shield,
+    className: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+  },
+  super_admin: {
+    label: "Super Admin",
+    icon: ShieldCheck,
+    className:
+      "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+  },
+};
+
 export function DashboardHeader() {
-  const { user, signOut, isPlaceholderMode } = useAuth();
+  const { user, userProfile, signOut, isPlaceholderMode, isSuperAdmin } =
+    useAuth();
   const router = useRouter();
   const [showSettings, setShowSettings] = useState(false);
   const [showLogViewer, setShowLogViewer] = useState(false);
+  const [showUserManagement, setShowUserManagement] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -85,6 +112,18 @@ export function DashboardHeader() {
                     <p className="text-xs leading-none text-muted-foreground">
                       {user?.email}
                     </p>
+                    {userProfile?.role && (
+                      <Badge
+                        className={`mt-1.5 gap-1 ${ROLE_BADGES[userProfile.role].className}`}
+                        variant="secondary"
+                      >
+                        {(() => {
+                          const RoleIcon = ROLE_BADGES[userProfile.role].icon;
+                          return <RoleIcon className="h-3 w-3" />;
+                        })()}
+                        {ROLE_BADGES[userProfile.role].label}
+                      </Badge>
+                    )}
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -100,6 +139,17 @@ export function DashboardHeader() {
                   <ScrollText className="mr-2 h-4 w-4" />
                   <span>Lihat Log</span>
                 </DropdownMenuItem>
+                {isSuperAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setShowUserManagement(true)}
+                    >
+                      <Users className="mr-2 h-4 w-4" />
+                      <span>Kelola Pengguna</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut}>
                   <LogOut className="mr-2 h-4 w-4" />
@@ -120,6 +170,12 @@ export function DashboardHeader() {
 
       {/* Log Viewer Dialog */}
       <LogViewerDialog open={showLogViewer} onOpenChange={setShowLogViewer} />
+
+      {/* User Management Dialog - Super Admin Only */}
+      <UserManagementDialog
+        open={showUserManagement}
+        onOpenChange={setShowUserManagement}
+      />
 
       {/* Notification Sidebar */}
       <NotificationSidebar />

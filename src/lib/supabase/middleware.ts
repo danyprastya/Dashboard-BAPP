@@ -60,22 +60,50 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If user is authenticated and trying to access protected route, verify email in database
+  // If user is authenticated and trying to access protected route, verify/create profile in database
   if (user && isProtectedRoute) {
     // Check if user's email exists in the profiles table
     const { data: profile, error } = await supabase
       .from("profiles")
       .select("id, email, role")
-      .eq("email", user.email)
+      .eq("id", user.id)
       .single();
 
     if (error || !profile) {
-      // Email not found in database - sign out and redirect to login
-      await supabase.auth.signOut();
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      url.searchParams.set("error", "unauthorized");
-      return NextResponse.redirect(url);
+      // Profile not found - try to create it
+      console.log("Middleware: Profile not found for user, creating...", user.email);
+      
+      const { error: createError } = await supabase
+        .from("profiles")
+        .insert({
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
+          role: "user",
+          created_at: new Date().toISOString(),
+        });
+
+      if (createError) {
+        console.error("Middleware: Profile creation failed:", createError.message);
+        // Only sign out if profile creation truly fails and profile doesn't exist
+        // Check one more time if profile exists (might be race condition)
+        const { data: retryProfile } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("id", user.id)
+          .single();
+        
+        if (!retryProfile) {
+          // Profile really doesn't exist and can't be created
+          await supabase.auth.signOut();
+          const url = request.nextUrl.clone();
+          url.pathname = "/login";
+          url.searchParams.set("error", "profile_error");
+          return NextResponse.redirect(url);
+        }
+      } else {
+        console.log("Middleware: Profile created successfully for", user.email);
+      }
     }
   }
 

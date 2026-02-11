@@ -24,7 +24,9 @@ import {
   PieChart as PieChartIcon,
   TrendingUp,
   MousePointerClick,
+  RefreshCw,
 } from "lucide-react";
+import { ContainerSpinner } from "@/components/ui/loading";
 import type { CustomerWithAreas, ContractWithProgress } from "@/types/database";
 
 // =============================================================================
@@ -87,8 +89,10 @@ export interface ChartFilter {
 
 interface ProgressChartsProps {
   data: CustomerWithAreas[];
+  isLoading?: boolean;
   onFilterChange: (filter: ChartFilter | null) => void;
   activeFilter: ChartFilter | null;
+  onRefresh?: () => void;
 }
 
 interface BarDataItem {
@@ -384,8 +388,10 @@ const CustomYAxisTick = ({
 
 export function ProgressCharts({
   data,
+  isLoading,
   onFilterChange,
   activeFilter,
+  onRefresh,
 }: ProgressChartsProps) {
   const [chartView, setChartView] = useState<"customer" | "area">("customer");
 
@@ -573,8 +579,42 @@ export function ProgressCharts({
   // Whether scrolling is needed
   const needsScroll = chartContentHeight > CHART_CONFIG.bar.maxHeight;
 
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 lg:grid-cols-4">
+        <Card className="lg:col-span-3">
+          <CardContent className="pt-6">
+            <ContainerSpinner text="Memuat grafik..." className="min-h-75" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <ContainerSpinner text="Memuat statistik..." className="min-h-55" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (data.length === 0) {
-    return null;
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col items-center justify-center gap-4 min-h-37.5">
+            <BarChart3 className="h-10 w-10 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              Data grafik belum tersedia
+            </p>
+            {onRefresh && (
+              <Button variant="outline" size="sm" onClick={onRefresh}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Muat Ulang
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -663,7 +703,12 @@ export function ProgressCharts({
                   minHeight: `${CHART_CONFIG.bar.minHeight}px`,
                 }}
               >
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                  minWidth={1}
+                  minHeight={1}
+                >
                   <BarChart
                     data={currentChartData}
                     layout="vertical"
@@ -746,7 +791,12 @@ export function ProgressCharts({
           </CardHeader>
           <CardContent className="pt-0">
             <div style={{ height: `${CHART_CONFIG.pie.height}px` }}>
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                minWidth={1}
+                minHeight={1}
+              >
                 <PieChart>
                   <Pie
                     data={statusData}
